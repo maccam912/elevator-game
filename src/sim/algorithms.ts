@@ -13,18 +13,36 @@ function estimateArrival(state: AlgorithmState, elevIndex: number, floor: number
   return base + penalty + idleBonus
 }
 
+function createClaimTracker(state: AlgorithmState) {
+  const claimed = new Set<number>()
+  for (const e of state.elevators) {
+    for (const t of e.targets) claimed.add(t)
+  }
+  return {
+    has(floor: number) {
+      return claimed.has(floor)
+    },
+    add(floor: number) {
+      claimed.add(floor)
+    },
+  }
+}
+
 const NearestCar: Algorithm = {
   name: 'Nearest Car',
   decide(state: AlgorithmState) {
     // For each hall call, pick the closest elevator. Allows multiple calls per elevator.
     const decisions: AlgorithmDecision[] = []
+    const tracker = createClaimTracker(state)
     const allCalls: number[] = [...state.calls.up, ...state.calls.down]
     for (const floor of allCalls) {
+      if (tracker.has(floor)) continue
       let best = 0, bestCost = Number.POSITIVE_INFINITY
       for (let i = 0; i < state.elevators.length; i++) {
         const cost = estimateArrival(state, i, floor)
         if (cost < bestCost) { bestCost = cost; best = i }
       }
+      tracker.add(floor)
       decisions.push({ elevator: best, addTargets: [floor] })
     }
     return decisions
@@ -41,9 +59,11 @@ const ExclusiveNearest: Algorithm = {
 
     // Track how many calls each elevator has been assigned in this tick
     const assignedCount = Array(state.elevators.length).fill(0)
+    const tracker = createClaimTracker(state)
 
     // Greedy assignment: for each call, prefer cars with lowest cost; break ties by fewer assigned.
     for (const floor of calls) {
+      if (tracker.has(floor)) continue
       let best = 0
       let bestScore = Number.POSITIVE_INFINITY
       for (let i = 0; i < state.elevators.length; i++) {
@@ -52,6 +72,7 @@ const ExclusiveNearest: Algorithm = {
         if (score < bestScore) { bestScore = score; best = i }
       }
       assignedCount[best]++
+      tracker.add(floor)
       decisions.push({ elevator: best, addTargets: [floor] })
     }
     return decisions
@@ -62,6 +83,7 @@ const CollectiveSimple: Algorithm = {
   name: 'Collective (Simple)',
   decide(state: AlgorithmState) {
     const decisions: AlgorithmDecision[] = []
+    const tracker = createClaimTracker(state)
     // Each elevator: if idle, pick nearest hall call; else let it serve along direction
     const calls = [...state.calls.up, ...state.calls.down]
     for (let i = 0; i < state.elevators.length; i++) {
@@ -71,16 +93,25 @@ const CollectiveSimple: Algorithm = {
         let bestFloor = -1
         let bestDist = Number.POSITIVE_INFINITY
         for (const c of calls) {
+          if (tracker.has(c)) continue
           const d = Math.abs(c - e.position)
           if (d < bestDist) { bestDist = d; bestFloor = c }
         }
-        if (bestFloor >= 0) decisions.push({ elevator: i, addTargets: [bestFloor] })
+        if (bestFloor >= 0) {
+          decisions.push({ elevator: i, addTargets: [bestFloor] })
+          tracker.add(bestFloor)
+        }
       } else {
         // moving: ensure we stop at any calls we pass
         const dir = e.direction > 0 ? 1 : -1
         const along = (f: number) => dir > 0 ? f >= e.position : f <= e.position
-        const passCalls = (dir > 0 ? state.calls.up : state.calls.down).filter(along)
-        if (passCalls.length) decisions.push({ elevator: i, addTargets: passCalls })
+        const passCalls = (dir > 0 ? state.calls.up : state.calls.down)
+          .filter(along)
+          .filter(f => !tracker.has(f))
+        if (passCalls.length) {
+          decisions.push({ elevator: i, addTargets: passCalls })
+          passCalls.forEach(f => tracker.add(f))
+        }
       }
     }
     return decisions
@@ -95,13 +126,16 @@ const Zoned: Algorithm = {
     const n = state.elevators.length
     const floors = state.floors
     const zoneSize = Math.ceil(floors / n)
+    const tracker = createClaimTracker(state)
     function owner(floor: number) {
       const idx = Math.min(n - 1, Math.floor(floor / zoneSize))
       return idx
     }
     const calls: number[] = [...state.calls.up, ...state.calls.down]
     for (const floor of calls) {
+      if (tracker.has(floor)) continue
       const idx = owner(floor)
+      tracker.add(floor)
       decisions.push({ elevator: idx, addTargets: [floor] })
     }
     return decisions
@@ -115,7 +149,13 @@ const IdleToLobby: Algorithm = {
     const lobby = 0
     for (let i = 0; i < state.elevators.length; i++) {
       const e = state.elevators[i]
-      if (e.direction === 0 && e.position !== lobby && state.calls.up.length === 0 && state.calls.down.length === 0) {
+      if (
+        e.direction === 0 &&
+        e.position !== lobby &&
+        state.calls.up.length === 0 &&
+        state.calls.down.length === 0 &&
+        !e.targets.has(lobby)
+      ) {
         out.push({ elevator: i, addTargets: [lobby] })
       }
     }

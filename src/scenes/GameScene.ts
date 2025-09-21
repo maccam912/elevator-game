@@ -3,6 +3,7 @@ import { ElevatorSim, DEFAULT_CONFIG } from '../sim/sim'
 import type { SimConfig, SimStats } from '../sim/sim'
 import { Algorithms, CustomAlgorithmBuilder } from '../sim/algorithms'
 import type { AlgorithmKind } from '../sim/algorithms'
+import type { ElevatorState } from '../sim/types'
 
 export class GameScene extends Phaser.Scene {
   static KEY = 'GameScene'
@@ -80,7 +81,7 @@ export class GameScene extends Phaser.Scene {
       occ: e.passengers.length,
       cap: e.capacity,
       doorsOpen: e.doorsOpen,
-      targets: [...e.targets],
+      targets: [...e.targets].sort((a, b) => a - b),
     }))
     const calls = this.sim.floorsState.map((fs, floor) => ({ floor, up: fs.upQueue.length, down: fs.downQueue.length }))
     this.game.events.emit('sim:fleet', { elevators: fleet, calls })
@@ -174,10 +175,18 @@ export class GameScene extends Phaser.Scene {
       this.gfx.fillRect(x + 2, barY, Math.max(0, (shaftWidth - 4) * capPct), barH)
 
       // targets markers
-      this.gfx.lineStyle(1, 0xff6b6b, 1)
-      for (const t of elev.targets) {
+      const nextTarget = this.getNextTargetFloor(elev)
+      const targetFloors = [...elev.targets].sort((a, b) => a - b)
+      for (const t of targetFloors) {
         const ty = buildingBottom - t * this.floorHeight - 2
-        this.gfx.beginPath(); this.gfx.moveTo(x + 2, ty); this.gfx.lineTo(x + shaftWidth - 2, ty); this.gfx.strokePath()
+        const isNext = nextTarget !== null && t === nextTarget
+        const color = isNext ? 0x58d68d : 0xff6b6b
+        const thickness = isNext ? 2 : 1
+        this.gfx.lineStyle(thickness, color, 1)
+        this.gfx.beginPath()
+        this.gfx.moveTo(x + 2, ty)
+        this.gfx.lineTo(x + shaftWidth - 2, ty)
+        this.gfx.strokePath()
       }
     }
 
@@ -202,6 +211,37 @@ export class GameScene extends Phaser.Scene {
       this.addText(`↑${upQ}`, buildingLeft - 100, y - 16, 0x58d68d)
       this.addText(`↓${dnQ}`, buildingLeft - 100, y + 4, 0xff6b6b)
     }
+  }
+
+  private getNextTargetFloor(elev: ElevatorState): number | null {
+    if (elev.targets.size === 0) return null
+    const pos = elev.position
+    const dir = elev.direction
+
+    if (dir > 0) {
+      let nearestAbove = Number.POSITIVE_INFINITY
+      for (const t of elev.targets) {
+        if (t >= pos && t < nearestAbove) nearestAbove = t
+      }
+      if (nearestAbove !== Number.POSITIVE_INFINITY) return nearestAbove
+    } else if (dir < 0) {
+      let nearestBelow = Number.NEGATIVE_INFINITY
+      for (const t of elev.targets) {
+        if (t <= pos && t > nearestBelow) nearestBelow = t
+      }
+      if (nearestBelow !== Number.NEGATIVE_INFINITY) return nearestBelow
+    }
+
+    let fallback: number | null = null
+    let bestDist = Number.POSITIVE_INFINITY
+    for (const t of elev.targets) {
+      const dist = Math.abs(t - pos)
+      if (dist < bestDist) {
+        bestDist = dist
+        fallback = t
+      }
+    }
+    return fallback
   }
 
   private addText(text: string, x: number, y: number, color: number) {

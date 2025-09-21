@@ -35,6 +35,10 @@ export class ElevatorSim {
   private hallUp = new Set<number>()
   private hallDown = new Set<number>()
 
+  private isTargetClaimedByOther(elevatorIdx: number, floor: number): boolean {
+    return this.elevators.some((other, idx) => idx !== elevatorIdx && other.targets.has(floor))
+  }
+
   constructor(cfg: SimConfig) {
     this.floors = cfg.floors
     this.capacity = cfg.capacity
@@ -153,7 +157,10 @@ export class ElevatorSim {
       const e = this.elevators[d.elevator]
       if (!e) continue
       for (const floor of d.addTargets) {
-        if (floor >= 0 && floor < this.floors) e.targets.add(floor)
+        if (floor < 0 || floor >= this.floors) continue
+        if (e.targets.has(floor)) continue
+        if (this.isTargetClaimedByOther(d.elevator, floor)) continue
+        e.targets.add(floor)
       }
       // Set direction if idle, favoring directional service
       if (e.direction === 0 && e.targets.size > 0) {
