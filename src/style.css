@@ -71,6 +71,12 @@ html, body, #app { height: 100%; }
   overflow: hidden;
 }
 
+#gameParent canvas {
+  /* Allow the page to scroll vertically when touching the game on mobile */
+  touch-action: pan-y pinch-zoom !important;
+  -ms-touch-action: pan-y !important;
+}
+
 #sidebar {
   display: flex;
   flex-direction: column;
