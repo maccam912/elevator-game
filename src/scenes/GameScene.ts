@@ -1,6 +1,7 @@
 import Phaser from 'phaser'
 import { ElevatorSim, DEFAULT_CONFIG } from '../sim/sim'
 import type { SimConfig, SimStats } from '../sim/sim'
+import type { ElevatorState } from '../sim/types'
 import { Algorithms, CustomAlgorithmBuilder } from '../sim/algorithms'
 import type { AlgorithmKind } from '../sim/algorithms'
 
@@ -174,9 +175,11 @@ export class GameScene extends Phaser.Scene {
       this.gfx.fillRect(x + 2, barY, Math.max(0, (shaftWidth - 4) * capPct), barH)
 
       // targets markers
-      this.gfx.lineStyle(1, 0xff6b6b, 1)
+      const destFloor = this.getNextDestination(elev)
       for (const t of elev.targets) {
         const ty = buildingBottom - t * this.floorHeight - 2
+        const color = destFloor !== null && t === destFloor ? 0x58d68d : 0xff6b6b
+        this.gfx.lineStyle(1, color, 1)
         this.gfx.beginPath(); this.gfx.moveTo(x + 2, ty); this.gfx.lineTo(x + shaftWidth - 2, ty); this.gfx.strokePath()
       }
     }
@@ -209,5 +212,35 @@ export class GameScene extends Phaser.Scene {
     t.setDepth(1000)
     // Destroy next frame to avoid piling up. We draw labels anew each frame.
     this.time.delayedCall(0, () => t.destroy())
+  }
+
+  private getNextDestination(elev: ElevatorState): number | null {
+    if (elev.targets.size === 0) return null
+
+    const pos = elev.position
+    if (elev.direction > 0) {
+      let best: number | null = null
+      for (const t of elev.targets) {
+        if (t >= pos - 1e-6 && (best === null || t < best)) best = t
+      }
+      if (best !== null) return best
+    } else if (elev.direction < 0) {
+      let best: number | null = null
+      for (const t of elev.targets) {
+        if (t <= pos + 1e-6 && (best === null || t > best)) best = t
+      }
+      if (best !== null) return best
+    }
+
+    let nearest: number | null = null
+    let nearestDist = Number.POSITIVE_INFINITY
+    for (const t of elev.targets) {
+      const dist = Math.abs(t - pos)
+      if (dist < nearestDist) {
+        nearestDist = dist
+        nearest = t
+      }
+    }
+    return nearest
   }
 }
