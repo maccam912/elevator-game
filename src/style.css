@@ -24,10 +24,11 @@ a:hover {
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
+  background: #0f1216;
+  color: #e7ecf3;
+  display: block;
 }
 
 h1 {
@@ -36,10 +37,10 @@ h1 {
 }
 
 #app {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  text-align: left;
 }
 
 .logo {
@@ -82,6 +83,31 @@ button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
+button.tab {
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: #a5b0bf;
+  padding: 8px 0;
+  min-height: 36px;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.tab-bar .tab:hover {
+  border: none;
+  background: #1f2630;
+}
+
+.tab-bar .tab.active {
+  background: #173047;
+  color: #e7ecf3;
+}
+
+.tab-bar .tab:focus-visible {
+  outline: 2px solid #366ea3;
+  outline-offset: 2px;
+}
+
 @media (prefers-color-scheme: light) {
   :root {
     color: #213547;
@@ -118,17 +144,77 @@ html, body, #app { height: 100%; }
 #sidebar {
   background: #151a21;
   border-left: 1px solid #1f2630;
-  padding: 14px 14px 100px;
-  overflow: auto;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   text-align: left;
 }
 
-h1.title {
-  font-size: 18px;
-  margin: 0 0 12px;
+.sidebar-header {
+  flex-shrink: 0;
+  margin-bottom: 16px;
 }
 
-.section { margin-bottom: 16px; }
+.sidebar-title {
+  margin: 0;
+  font-size: 20px;
+  text-align: center;
+}
+
+.tab-bar {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 4px;
+  border: 1px solid #1f2630;
+  border-radius: 999px;
+  background: #10141b;
+}
+
+.sidebar-body {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 6px;
+  padding-bottom: 48px;
+}
+
+.title {
+  font-size: 18px;
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+
+.section { margin-bottom: 20px; }
+
+.row.button-row {
+  align-items: stretch;
+}
+
+.row.button-row button {
+  flex: 1;
+}
+
+.custom-editor {
+  display: none;
+}
+
+.custom-editor.is-visible {
+  display: block;
+}
+
+.custom-placeholder {
+  padding: 10px 12px;
+  border: 1px dashed #2a2f3a;
+  border-radius: 6px;
+  background: #11151b;
+  margin-bottom: 12px;
+}
+
+.is-hidden {
+  display: none !important;
+}
 
 .row {
   display: flex;
@@ -140,7 +226,7 @@ h1.title {
 
 label { color: #a5b0bf; font-size: 12px; }
 
-input[type="range"], select, button, input[type="number"], textarea {
+input[type="range"], select, button:not(.tab), input[type="number"], textarea {
   width: 100%;
   background: #11151b;
   color: #e7ecf3;
@@ -151,6 +237,7 @@ input[type="range"], select, button, input[type="number"], textarea {
 }
 
 input[type="range"] { padding: 0; }
+select, button:not(.tab), input[type="number"], textarea { min-height: 38px; }
 button { cursor: pointer; }
 button.primary { background: #173047; border-color: #21435e; }
 button.primary:hover { background: #183650; }
@@ -221,3 +308,83 @@ button.primary:hover { background: #183650; }
 .badge { border:1px solid #2a2f3a; border-radius:999px; padding:2px 8px; font-size:12px; }
 .badge.up { color:#58d68d; }
 .badge.down { color:#ff6b6b; }
+
+@media (max-width: 960px) {
+  #app {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(320px, 55vh) auto;
+  }
+
+  #sidebar {
+    border-left: none;
+    border-top: 1px solid #1f2630;
+    padding: 16px 12px 24px;
+  }
+
+  .sidebar-header {
+    position: sticky;
+    top: 0;
+    background: #151a21;
+    padding-bottom: 12px;
+    margin-bottom: 16px;
+    z-index: 2;
+  }
+
+  .tab-bar {
+    display: flex;
+  }
+
+  .sidebar-body {
+    padding-right: 0;
+  }
+
+  .section[data-tab-section] {
+    display: none;
+  }
+
+  .section[data-tab-section].tab-active {
+    display: block;
+  }
+
+  .row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .row label {
+    width: 100%;
+  }
+
+  .row .small {
+    margin-top: 2px;
+  }
+
+  .grid-two {
+    grid-template-columns: 1fr;
+  }
+
+  .stats {
+    grid-template-columns: 1fr;
+  }
+
+  .fleet-row {
+    grid-template-columns: 38px 1fr;
+    grid-template-rows: auto auto;
+  }
+
+  .fleet-row > div:nth-child(3),
+  .fleet-row > div:nth-child(4) {
+    grid-column: 1 / -1;
+    text-align: left;
+  }
+
+  #gameParent {
+    min-height: 320px;
+  }
+}
+
+@media (min-width: 961px) {
+  .sidebar-title {
+    text-align: left;
+  }
+}

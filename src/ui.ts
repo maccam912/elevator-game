@@ -17,8 +17,37 @@ export function setupUI(game: Phaser.Game) {
   const toLobbyPctLabel = getEl<HTMLDivElement>('toLobbyPctLabel')
 
   const customSection = getEl<HTMLDivElement>('customEditorSection')
+  const customPlaceholder = getEl<HTMLDivElement>('customPlaceholder')
   const customCode = getEl<HTMLTextAreaElement>('customCode')
   const loadCustom = getEl<HTMLButtonElement>('loadCustom')
+
+  const tabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-tab-button]'))
+  const tabSections = Array.from(document.querySelectorAll<HTMLElement>('[data-tab-section]'))
+  const mobileQuery = window.matchMedia('(max-width: 960px)')
+
+  function setActiveTab(tab: string) {
+    tabButtons.forEach(btn => {
+      const target = btn.dataset.tabButton
+      const isActive = target === tab
+      btn.classList.toggle('active', isActive)
+      btn.setAttribute('aria-selected', isActive ? 'true' : 'false')
+      btn.setAttribute('tabindex', isActive ? '0' : '-1')
+    })
+
+    tabSections.forEach(section => {
+      const target = section.dataset.tabSection
+      section.classList.toggle('tab-active', target === tab)
+    })
+  }
+
+  tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.tabButton
+      if (target) setActiveTab(target)
+    })
+  })
+
+  setActiveTab('controls')
 
   // Manual call
   const manualFloor = getEl<HTMLInputElement>('manualFloor')
@@ -59,9 +88,18 @@ function decide(state){
   toLobbyPct.addEventListener('input', updateLobbyLabel)
   updateLobbyLabel()
 
-  algorithmSelect.addEventListener('change', () => {
-    customSection.style.display = algorithmSelect.value === 'custom' ? 'block' : 'none'
-  })
+  function updateCustomVisibility() {
+    const isCustom = algorithmSelect.value === 'custom'
+    customSection.classList.toggle('is-visible', isCustom)
+    customPlaceholder.classList.toggle('is-hidden', isCustom)
+
+    if (isCustom && mobileQuery.matches) {
+      setActiveTab('custom')
+    }
+  }
+
+  algorithmSelect.addEventListener('change', updateCustomVisibility)
+  updateCustomVisibility()
 
   applyBtn.addEventListener('click', () => {
     const floors = clamp(parseInt(floorsInput.value || '10', 10), 2, 50)
