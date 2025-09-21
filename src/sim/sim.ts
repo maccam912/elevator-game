@@ -34,6 +34,7 @@ export class ElevatorSim {
 
   private hallUp = new Set<number>()
   private hallDown = new Set<number>()
+  private hallClaims = new Map<number, number>()
 
   constructor(cfg: SimConfig) {
     this.floors = cfg.floors
@@ -142,24 +143,83 @@ export class ElevatorSim {
   }
 
   private applyAlgorithm() {
+    this.cleanupHallClaims()
+
+    const hallClaims: (number | null)[] = Array(this.floors).fill(null)
+    for (const [floor, elevId] of this.hallClaims.entries()) {
+      if (floor >= 0 && floor < this.floors) {
+        hallClaims[floor] = elevId ?? null
+      }
+    }
+
     const state: AlgorithmState = {
       time: this.time,
       elevators: this.elevators.map(e => ({ ...e, targets: new Set(e.targets) })),
       floors: this.floors,
       calls: { up: [...this.hallUp].sort((a,b)=>a-b), down: [...this.hallDown].sort((a,b)=>a-b) },
+      hallClaims,
     }
     const decisions = this.algorithm.decide(state)
     for (const d of decisions) {
       const e = this.elevators[d.elevator]
       if (!e) continue
       for (const floor of d.addTargets) {
-        if (floor >= 0 && floor < this.floors) e.targets.add(floor)
+        if (floor < 0 || floor >= this.floors) continue
+        const hallCallActive = this.hallUp.has(floor) || this.hallDown.has(floor)
+        if (hallCallActive) {
+          const claimedBy = this.hallClaims.get(floor)
+          if (claimedBy !== undefined && claimedBy !== e.id) {
+            this.removeHallTarget(e, floor)
+            continue
+          }
+        }
+        e.targets.add(floor)
+        if (hallCallActive) {
+          this.hallClaims.set(floor, e.id)
+          for (const other of this.elevators) {
+            if (other.id === e.id) continue
+            const hasPassenger = other.passengers.some(p => p.dest === floor)
+            if (!hasPassenger) this.removeHallTarget(other, floor)
+          }
+        }
       }
       // Set direction if idle, favoring directional service
       if (e.direction === 0 && e.targets.size > 0) {
         const next = nearestTargetDirectional(e)
         e.direction = next > e.position ? 1 : (next < e.position ? -1 : 0)
       }
+    }
+  }
+
+  private cleanupHallClaims() {
+    for (const [floor, elevId] of [...this.hallClaims.entries()]) {
+      if (!this.hallUp.has(floor) && !this.hallDown.has(floor)) {
+        this.hallClaims.delete(floor)
+        continue
+      }
+      if (!Number.isInteger(elevId) || elevId < 0 || elevId >= this.elevators.length) {
+        this.hallClaims.delete(floor)
+        continue
+      }
+      const elevator = this.elevators[elevId]
+      if (!elevator.targets.has(floor)) {
+        this.hallClaims.delete(floor)
+      }
+    }
+  }
+
+  private removeHallTarget(e: ElevatorState, floor: number) {
+    if (e.passengers.some(p => p.dest === floor)) return
+    if (!e.targets.delete(floor)) return
+    if (e.passengers.length === 0 && e.targets.size === 0) {
+      e.direction = 0
+      return
+    }
+    if (!hasTargetsInDirection(e, e.direction)) {
+      const next = nearestTargetDirectional(e)
+      if (next > e.position) e.direction = 1
+      else if (next < e.position) e.direction = -1
+      else e.direction = 0
     }
   }
 
@@ -229,6 +289,7 @@ export class ElevatorSim {
     }
     e.passengers = remaining
     e.targets.delete(floor)
+    if (this.hallClaims.get(floor) === e.id) this.hallClaims.delete(floor)
 
     // load in current moving direction first, then opposite if space
     const arrivingDir: Direction = e.direction

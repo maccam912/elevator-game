@@ -29,6 +29,7 @@ export interface AlgorithmState {
   elevators: ElevatorState[]
   floors: number
   calls: { up: number[]; down: number[] }
+  hallClaims: (number | null)[]
 }
 
 export interface AlgorithmDecision {

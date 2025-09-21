@@ -20,12 +20,16 @@ const NearestCar: Algorithm = {
     const decisions: AlgorithmDecision[] = []
     const allCalls: number[] = [...state.calls.up, ...state.calls.down]
     for (const floor of allCalls) {
-      let best = 0, bestCost = Number.POSITIVE_INFINITY
+      const claimed = state.hallClaims[floor]
+      const owner = typeof claimed === 'number' && claimed >= 0 && claimed < state.elevators.length ? claimed : null
+      let best = -1
+      let bestCost = Number.POSITIVE_INFINITY
       for (let i = 0; i < state.elevators.length; i++) {
+        if (owner !== null && owner !== i) continue
         const cost = estimateArrival(state, i, floor)
         if (cost < bestCost) { bestCost = cost; best = i }
       }
-      decisions.push({ elevator: best, addTargets: [floor] })
+      if (best >= 0) decisions.push({ elevator: best, addTargets: [floor] })
     }
     return decisions
   }
@@ -44,13 +48,18 @@ const ExclusiveNearest: Algorithm = {
 
     // Greedy assignment: for each call, prefer cars with lowest cost; break ties by fewer assigned.
     for (const floor of calls) {
-      let best = 0
+      const claimed = state.hallClaims[floor]
+      const owner = typeof claimed === 'number' && claimed >= 0 && claimed < state.elevators.length ? claimed : null
+      let best = -1
       let bestScore = Number.POSITIVE_INFINITY
       for (let i = 0; i < state.elevators.length; i++) {
+        if (owner !== null && owner !== i) continue
         const eta = estimateArrival(state, i, floor)
         const score = eta + assignedCount[i] * 0.5
         if (score < bestScore) { bestScore = score; best = i }
       }
+      if (owner !== null && owner !== best) continue
+      if (best < 0 || bestScore === Number.POSITIVE_INFINITY) continue
       assignedCount[best]++
       decisions.push({ elevator: best, addTargets: [floor] })
     }
@@ -71,6 +80,9 @@ const CollectiveSimple: Algorithm = {
         let bestFloor = -1
         let bestDist = Number.POSITIVE_INFINITY
         for (const c of calls) {
+          const claimed = state.hallClaims[c]
+          const owner = typeof claimed === 'number' && claimed >= 0 && claimed < state.elevators.length ? claimed : null
+          if (owner !== null && owner !== i) continue
           const d = Math.abs(c - e.position)
           if (d < bestDist) { bestDist = d; bestFloor = c }
         }
@@ -79,7 +91,13 @@ const CollectiveSimple: Algorithm = {
         // moving: ensure we stop at any calls we pass
         const dir = e.direction > 0 ? 1 : -1
         const along = (f: number) => dir > 0 ? f >= e.position : f <= e.position
-        const passCalls = (dir > 0 ? state.calls.up : state.calls.down).filter(along)
+        const passCalls = (dir > 0 ? state.calls.up : state.calls.down)
+          .filter(f => along(f))
+          .filter(f => {
+            const claimed = state.hallClaims[f]
+            const owner = typeof claimed === 'number' && claimed >= 0 && claimed < state.elevators.length ? claimed : null
+            return owner === null || owner === i
+          })
         if (passCalls.length) decisions.push({ elevator: i, addTargets: passCalls })
       }
     }
@@ -102,6 +120,9 @@ const Zoned: Algorithm = {
     const calls: number[] = [...state.calls.up, ...state.calls.down]
     for (const floor of calls) {
       const idx = owner(floor)
+      const claimed = state.hallClaims[floor]
+      const assigned = typeof claimed === 'number' && claimed >= 0 && claimed < state.elevators.length ? claimed : null
+      if (assigned !== null && assigned !== idx) continue
       decisions.push({ elevator: idx, addTargets: [floor] })
     }
     return decisions

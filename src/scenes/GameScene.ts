@@ -1,6 +1,7 @@
 import Phaser from 'phaser'
 import { ElevatorSim, DEFAULT_CONFIG } from '../sim/sim'
 import type { SimConfig, SimStats } from '../sim/sim'
+import type { ElevatorState } from '../sim/types'
 import { Algorithms, CustomAlgorithmBuilder } from '../sim/algorithms'
 import type { AlgorithmKind } from '../sim/algorithms'
 
@@ -174,9 +175,13 @@ export class GameScene extends Phaser.Scene {
       this.gfx.fillRect(x + 2, barY, Math.max(0, (shaftWidth - 4) * capPct), barH)
 
       // targets markers
-      this.gfx.lineStyle(1, 0xff6b6b, 1)
+      const nextDest = this.nextDestinationFor(elev)
       for (const t of elev.targets) {
+        const isNext = nextDest !== null && t === nextDest
+        const color = isNext ? 0x58d68d : 0xff6b6b
+        const thickness = isNext ? 2 : 1
         const ty = buildingBottom - t * this.floorHeight - 2
+        this.gfx.lineStyle(thickness, color, 1)
         this.gfx.beginPath(); this.gfx.moveTo(x + 2, ty); this.gfx.lineTo(x + shaftWidth - 2, ty); this.gfx.strokePath()
       }
     }
@@ -202,6 +207,35 @@ export class GameScene extends Phaser.Scene {
       this.addText(`↑${upQ}`, buildingLeft - 100, y - 16, 0x58d68d)
       this.addText(`↓${dnQ}`, buildingLeft - 100, y + 4, 0xff6b6b)
     }
+  }
+
+  private nextDestinationFor(e: ElevatorState): number | null {
+    if (!e.targets || e.targets.size === 0) return null
+    const pos = e.position
+    const targets = [...e.targets]
+    if (e.direction > 0) {
+      let best = Number.POSITIVE_INFINITY
+      for (const t of targets) {
+        if (t >= pos && t < best) best = t
+      }
+      if (best !== Number.POSITIVE_INFINITY) return best
+    } else if (e.direction < 0) {
+      let best = Number.NEGATIVE_INFINITY
+      for (const t of targets) {
+        if (t <= pos && t > best) best = t
+      }
+      if (best !== Number.NEGATIVE_INFINITY) return best
+    }
+    let nearest = targets[0]!
+    let bestDist = Math.abs(nearest - pos)
+    for (const t of targets) {
+      const dist = Math.abs(t - pos)
+      if (dist < bestDist) {
+        bestDist = dist
+        nearest = t
+      }
+    }
+    return nearest
   }
 
   private addText(text: string, x: number, y: number, color: number) {
