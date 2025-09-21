@@ -1,6 +1,6 @@
 import type { Algorithm, AlgorithmDecision, AlgorithmState } from './types'
 
-export type AlgorithmKind = 'nearest' | 'exclusiveNearest' | 'collective' | 'zoned' | 'idleLobby' | 'custom'
+export type AlgorithmKind = 'nearest' | 'nearestNonBusy' | 'exclusiveNearest' | 'collective' | 'zoned' | 'idleLobby' | 'custom'
 
 function estimateArrival(state: AlgorithmState, elevIndex: number, floor: number): number {
   const e = state.elevators[elevIndex]
@@ -26,6 +26,31 @@ const NearestCar: Algorithm = {
         if (cost < bestCost) { bestCost = cost; best = i }
       }
       decisions.push({ elevator: best, addTargets: [floor] })
+    }
+    return decisions
+  }
+}
+
+const NearestIdleCar: Algorithm = {
+  name: 'Nearest Non-Busy Car',
+  decide(state: AlgorithmState) {
+    const decisions: AlgorithmDecision[] = []
+    const allCalls: number[] = [...state.calls.up, ...state.calls.down]
+    for (const floor of allCalls) {
+      let idleBest = -1
+      let idleBestCost = Number.POSITIVE_INFINITY
+      let fallbackBest = -1
+      let fallbackBestCost = Number.POSITIVE_INFINITY
+      for (let i = 0; i < state.elevators.length; i++) {
+        const cost = estimateArrival(state, i, floor)
+        if (cost < fallbackBestCost) { fallbackBestCost = cost; fallbackBest = i }
+        const e = state.elevators[i]
+        if (e.direction === 0 && e.targets.size === 0) {
+          if (cost < idleBestCost) { idleBestCost = cost; idleBest = i }
+        }
+      }
+      const targetElev = idleBest >= 0 ? idleBest : fallbackBest
+      if (targetElev >= 0) decisions.push({ elevator: targetElev, addTargets: [floor] })
     }
     return decisions
   }
@@ -127,6 +152,7 @@ const IdleToLobby: Algorithm = {
 
 export const Algorithms: Record<Exclude<AlgorithmKind, 'custom'>, Algorithm> = {
   nearest: NearestCar,
+  nearestNonBusy: NearestIdleCar,
   exclusiveNearest: ExclusiveNearest,
   collective: CollectiveSimple,
   zoned: Zoned,
