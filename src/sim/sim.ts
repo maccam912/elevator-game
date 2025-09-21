@@ -156,8 +156,11 @@ export class ElevatorSim {
     for (const d of decisions) {
       const e = this.elevators[d.elevator]
       if (!e) continue
+      const atCapacity = e.passengers.length >= e.capacity
       for (const floor of d.addTargets) {
-        if (floor >= 0 && floor < this.floors) e.targets.add(floor)
+        if (floor < 0 || floor >= this.floors) continue
+        if (atCapacity && !e.targets.has(floor)) continue
+        e.targets.add(floor)
       }
       // Set direction if idle, favoring directional service
       if (e.direction === 0 && e.targets.size > 0) {
@@ -276,6 +279,7 @@ export class ElevatorSim {
   }
 
   private handleStopAtFloor(e: ElevatorState, floor: number) {
+    const lobby = 0
     // open doors
     e.doorsOpen = true
     e.velocity = 0
@@ -293,12 +297,21 @@ export class ElevatorSim {
     e.passengers = remaining
     e.targets.delete(floor)
 
+    const fs = this.floorsState[floor]
+    const upBefore = fs.upQueue.length
+    const downBefore = fs.downQueue.length
+
     // load in current moving direction first, then opposite if space
     const arrivingDir: Direction = e.direction
     let boardedInDir = 0
     if (arrivingDir !== 0) boardedInDir = this.boardFromFloor(e, floor, arrivingDir)
     // Only consider opposite boarding if capacity remains
     if (e.passengers.length < e.capacity) this.boardFromFloor(e, floor, (arrivingDir === 0 ? 1 : (arrivingDir * -1 as Direction)))
+
+    const stillWaiting = (upBefore > 0 && fs.upQueue.length > 0) || (downBefore > 0 && fs.downQueue.length > 0)
+    if (stillWaiting && e.passengers.length >= e.capacity && floor > lobby) {
+      if (!e.targets.has(lobby)) e.targets.add(lobby)
+    }
 
     // Direction commitment: if we boarded someone while arriving, keep that direction
     if (arrivingDir !== 0 && boardedInDir > 0) {
@@ -310,7 +323,6 @@ export class ElevatorSim {
     }
 
     // clear hall call if empty for that direction
-    const fs = this.floorsState[floor]
     if (fs.upQueue.length === 0) this.hallUp.delete(floor)
     if (fs.downQueue.length === 0) this.hallDown.delete(floor)
   }
