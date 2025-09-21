@@ -1,110 +1,72 @@
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
+  font-family: "Inter", system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.4;
   font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
+  color-scheme: dark;
+  color: #e7ecf3;
+  background-color: #0f1216;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
-
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
+  background: #0f1216;
+  color: #e7ecf3;
+  display: block;
 }
 
 h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+  font-size: 1.75rem;
+  line-height: 1.2;
+  margin: 0;
 }
 
-#app {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
-}
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.vanilla:hover {
-  filter: drop-shadow(0 0 2em #3178c6aa);
-}
-
-.card {
-  padding: 2em;
-}
-
-.read-the-docs {
-  color: #888;
+a {
+  color: inherit;
 }
 
 button {
   border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
+  border: 1px solid #2a2f3a;
+  padding: 0.55em 1em;
   font-size: 1em;
   font-weight: 500;
   font-family: inherit;
-  background-color: #1a1a1a;
+  background-color: #11151b;
+  color: inherit;
   cursor: pointer;
-  transition: border-color 0.25s;
+  transition: background-color 0.2s, border-color 0.2s;
 }
 button:hover {
-  border-color: #646cff;
+  border-color: #3b4656;
+  background-color: #161c26;
 }
 button:focus,
 button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+  outline: 2px solid #3f6cf4;
+  outline-offset: 2px;
 }
 
 /* App layout overrides for the simulator */
-html, body, #app { height: 100%; }
+html,
+body {
+  height: 100%;
+}
 
 #app {
   display: grid;
-  grid-template-columns: 1fr 340px;
-  grid-template-rows: 100%;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-rows: minmax(0, 1fr);
   gap: 0;
+  width: 100%;
   height: 100%;
   max-width: none;
+  margin: 0;
   padding: 0;
 }
 
@@ -112,15 +74,54 @@ html, body, #app { height: 100%; }
   position: relative;
   width: 100%;
   height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 
 #sidebar {
   background: #151a21;
   border-left: 1px solid #1f2630;
-  padding: 14px 14px 100px;
-  overflow: auto;
+  padding: 20px 20px 32px;
+  overflow-y: auto;
   text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.tabbar {
+  display: none;
+  gap: 8px;
+  background: #11151b;
+  border: 1px solid #1f2630;
+  border-radius: 999px;
+  padding: 4px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.tab-button {
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #8fa2bf;
+}
+
+.tab-button.active {
+  background: #1f2633;
+  color: #fff;
+}
+
+.tab-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 h1.title {
@@ -128,7 +129,15 @@ h1.title {
   margin: 0 0 12px;
 }
 
-.section { margin-bottom: 16px; }
+.section {
+  margin: 0;
+}
+
+.tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
 
 .row {
   display: flex;
@@ -140,7 +149,7 @@ h1.title {
 
 label { color: #a5b0bf; font-size: 12px; }
 
-input[type="range"], select, button, input[type="number"], textarea {
+input[type="range"], select, input[type="number"], textarea {
   width: 100%;
   background: #11151b;
   color: #e7ecf3;
@@ -152,8 +161,14 @@ input[type="range"], select, button, input[type="number"], textarea {
 
 input[type="range"] { padding: 0; }
 button { cursor: pointer; }
-button.primary { background: #173047; border-color: #21435e; }
-button.primary:hover { background: #183650; }
+button.primary {
+  background: #1f3b5d;
+  border-color: #2f4f76;
+  color: #fff;
+}
+button.primary:hover {
+  background: #22476f;
+}
 
 .grid-two {
   display: grid;
@@ -221,3 +236,105 @@ button.primary:hover { background: #183650; }
 .badge { border:1px solid #2a2f3a; border-radius:999px; padding:2px 8px; font-size:12px; }
 .badge.up { color:#58d68d; }
 .badge.down { color:#ff6b6b; }
+
+@media (max-width: 960px) {
+  #app {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
+    height: auto;
+    min-height: 100vh;
+  }
+
+  #gameParent {
+    height: clamp(320px, 60vh, 640px);
+  }
+
+  #sidebar {
+    border-left: none;
+    border-top: 1px solid #1f2630;
+    padding: 16px 16px 32px;
+    gap: 16px;
+  }
+
+  .tabbar {
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .tab-panels {
+    gap: 0;
+  }
+
+  .tab-panel {
+    display: none;
+  }
+
+  .tab-panel.active {
+    display: flex;
+  }
+}
+
+@media (max-width: 720px) {
+  .grid-two {
+    grid-template-columns: 1fr;
+  }
+
+  .row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .row label {
+    width: 100%;
+  }
+
+  .row button {
+    width: 100%;
+  }
+
+  .row.row-actions {
+    flex-direction: row;
+  }
+
+  .row.row-actions button {
+    flex: 1;
+  }
+}
+
+@media (max-width: 600px) {
+  .stats {
+    grid-template-columns: 1fr;
+  }
+
+  .fleet-row {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "chip dir"
+      "capacity capacity"
+      "targets targets";
+    align-items: start;
+  }
+
+  .fleet-row > .chip {
+    grid-area: chip;
+  }
+
+  .fleet-row > div:nth-child(2) {
+    grid-area: capacity;
+  }
+
+  .fleet-row > div:nth-child(3) {
+    grid-area: dir;
+    text-align: right;
+  }
+
+  .fleet-row > div:nth-child(4) {
+    grid-area: targets;
+  }
+
+  .call-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+}

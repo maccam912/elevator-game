@@ -20,6 +20,33 @@ export function setupUI(game: Phaser.Game) {
   const customCode = getEl<HTMLTextAreaElement>('customCode')
   const loadCustom = getEl<HTMLButtonElement>('loadCustom')
 
+  const tabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-tab]'))
+  const tabPanels = Array.from(document.querySelectorAll<HTMLDivElement>('[data-tab-panel]'))
+
+  if (tabButtons.length && tabPanels.length) {
+    const setActiveTab = (tab: string) => {
+      tabButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab))
+      tabPanels.forEach(panel => panel.classList.toggle('active', panel.dataset.tabPanel === tab))
+    }
+
+    const initialTab = tabButtons.find(btn => btn.classList.contains('active'))?.dataset.tab ?? tabButtons[0]?.dataset.tab
+    if (initialTab) {
+      setActiveTab(initialTab)
+    }
+
+    tabButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab
+        if (!tab) return
+        setActiveTab(tab)
+
+        if (window.matchMedia('(max-width: 960px)').matches) {
+          btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+        }
+      })
+    })
+  }
+
   // Manual call
   const manualFloor = getEl<HTMLInputElement>('manualFloor')
   const manualDir = getEl<HTMLSelectElement>('manualDir')
