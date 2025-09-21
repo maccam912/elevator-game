@@ -4,8 +4,13 @@ import { GameScene } from './scenes/GameScene'
 import { setupUI } from './ui'
 
 const app = document.querySelector<HTMLDivElement>('#app')!
+app.classList.add('show-game')
 
 app.innerHTML = `
+  <div id="mobileToggle" class="mobile-toggle" aria-label="View selection">
+    <button type="button" data-target="game" aria-pressed="true">Elevators</button>
+    <button type="button" data-target="sidebar" aria-pressed="false">Controls</button>
+  </div>
   <div id="gameParent"></div>
   <div id="sidebar">
     <h1 class="title">Elevator Simulator</h1>
@@ -126,3 +131,27 @@ const game = new Phaser.Game({
 })
 
 setupUI(game)
+
+const mobileToggle = document.getElementById('mobileToggle')
+if (mobileToggle) {
+  const buttons = Array.from(mobileToggle.querySelectorAll<HTMLButtonElement>('button[data-target]'))
+  type Panel = 'game' | 'sidebar'
+  const setPanel = (panel: Panel) => {
+    app.classList.remove('show-game', 'show-sidebar')
+    app.classList.add(panel === 'game' ? 'show-game' : 'show-sidebar')
+    buttons.forEach((btn) => {
+      const isActive = btn.dataset.target === panel
+      btn.classList.toggle('active', isActive)
+      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false')
+    })
+  }
+
+  buttons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const target = (btn.dataset.target as Panel) || 'game'
+      setPanel(target)
+    })
+  })
+
+  setPanel('game')
+}

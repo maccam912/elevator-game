@@ -123,6 +123,25 @@ html, body, #app { height: 100%; }
   text-align: left;
 }
 
+.mobile-toggle {
+  display: none;
+}
+
+.mobile-toggle button {
+  flex: 1;
+  border: 1px solid #2a2f3a;
+  background: #11151b;
+  color: #e7ecf3;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.mobile-toggle button.active {
+  background: #173047;
+  border-color: #21435e;
+}
+
 h1.title {
   font-size: 18px;
   margin: 0 0 12px;
@@ -221,3 +240,37 @@ button.primary:hover { background: #183650; }
 .badge { border:1px solid #2a2f3a; border-radius:999px; padding:2px 8px; font-size:12px; }
 .badge.up { color:#58d68d; }
 .badge.down { color:#ff6b6b; }
+
+@media (max-width: 900px) {
+  #app {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .mobile-toggle {
+    display: flex;
+    gap: 8px;
+    grid-column: 1 / -1;
+    padding: 10px 14px;
+    background: #151a21;
+    border-bottom: 1px solid #1f2630;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+
+  #gameParent,
+  #sidebar {
+    grid-column: 1 / -1;
+  }
+
+  #gameParent,
+  #sidebar {
+    display: none;
+  }
+
+  #app.show-game #gameParent,
+  #app.show-sidebar #sidebar {
+    display: block;
+  }
+}
