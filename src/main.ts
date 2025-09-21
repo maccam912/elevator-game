@@ -6,13 +6,18 @@ import { setupUI } from './ui'
 const app = document.querySelector<HTMLDivElement>('#app')!
 
 app.innerHTML = `
-  <div id="gameParent"></div>
-  <div id="sidebar">
-    <h1 class="title">Elevator Simulator</h1>
-    <div class="section">
-      <div class="grid-two">
-        <div>
-          <label for="floors">Floors</label>
+  <div id="viewToggle" class="view-toggle">
+    <button id="viewGame" class="toggle-button active" aria-pressed="true">Elevators</button>
+    <button id="viewSidebar" class="toggle-button" aria-pressed="false">Controls</button>
+  </div>
+  <div id="layout" data-view="game">
+    <div id="gameParent"></div>
+    <div id="sidebar">
+      <h1 class="title">Elevator Simulator</h1>
+      <div class="section">
+        <div class="grid-two">
+          <div>
+            <label for="floors">Floors</label>
           <input id="floors" type="number" min="2" max="50" value="10"/>
         </div>
         <div>
@@ -107,8 +112,34 @@ app.innerHTML = `
       <h1 class="title">Floor Calls</h1>
       <div id="floorCalls" class="floor-calls"></div>
     </div>
+    </div>
   </div>
-`
+  `
+
+const layout = document.querySelector<HTMLDivElement>('#layout')!
+const viewGameBtn = document.querySelector<HTMLButtonElement>('#viewGame')!
+const viewSidebarBtn = document.querySelector<HTMLButtonElement>('#viewSidebar')!
+
+function setMobileView(view: 'game' | 'sidebar') {
+  layout.dataset.view = view
+  const isGame = view === 'game'
+  viewGameBtn.classList.toggle('active', isGame)
+  viewSidebarBtn.classList.toggle('active', !isGame)
+  viewGameBtn.setAttribute('aria-pressed', String(isGame))
+  viewSidebarBtn.setAttribute('aria-pressed', String(!isGame))
+}
+
+viewGameBtn.addEventListener('click', () => setMobileView('game'))
+viewSidebarBtn.addEventListener('click', () => setMobileView('sidebar'))
+
+const mobileQuery = window.matchMedia('(max-width: 900px)')
+mobileQuery.addEventListener('change', (event) => {
+  if (!event.matches) {
+    setMobileView('game')
+  }
+})
+
+setMobileView('game')
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,

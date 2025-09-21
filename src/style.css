@@ -24,10 +24,9 @@ a:hover {
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
+  background-color: #0f1216;
 }
 
 h1 {
@@ -99,13 +98,21 @@ button:focus-visible {
 html, body, #app { height: 100%; }
 
 #app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0;
+}
+
+#layout {
+  flex: 1 1 auto;
   display: grid;
-  grid-template-columns: 1fr 340px;
+  grid-template-columns: minmax(0, 1fr) 340px;
   grid-template-rows: 100%;
   gap: 0;
-  height: 100%;
-  max-width: none;
-  padding: 0;
+  min-height: 0;
 }
 
 #gameParent {
@@ -113,6 +120,7 @@ html, body, #app { height: 100%; }
   width: 100%;
   height: 100%;
   overflow: hidden;
+  min-height: 0;
 }
 
 #sidebar {
@@ -121,6 +129,62 @@ html, body, #app { height: 100%; }
   padding: 14px 14px 100px;
   overflow: auto;
   text-align: left;
+  min-height: 0;
+}
+
+.view-toggle {
+  display: none;
+  padding: 12px 14px;
+  background: #151a21;
+  border-bottom: 1px solid #1f2630;
+  gap: 8px;
+}
+
+.view-toggle .toggle-button {
+  flex: 1;
+  border: 1px solid #2a2f3a;
+  background: #11151b;
+  padding: 10px;
+}
+
+.view-toggle .toggle-button.active {
+  background: #173047;
+  border-color: #21435e;
+}
+
+@media (max-width: 900px) {
+  #app {
+    max-width: none;
+    width: 100%;
+  }
+
+  #layout {
+    display: flex;
+    flex-direction: column;
+  }
+
+  #layout > #gameParent,
+  #layout > #sidebar {
+    flex: 1 1 auto;
+  }
+
+  #layout[data-view='game'] #sidebar {
+    display: none;
+  }
+
+  #layout[data-view='sidebar'] #gameParent {
+    display: none;
+  }
+
+  #sidebar {
+    border-left: none;
+    border-top: 1px solid #1f2630;
+  }
+
+  .view-toggle {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 h1.title {
