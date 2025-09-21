@@ -41,6 +41,7 @@ app.innerHTML = `
           <label for="algorithm">Algorithm</label>
           <select id="algorithm">
             <option value="nearest">Nearest Car</option>
+            <option value="nearestNonBusy">Nearest Non-Busy Car</option>
             <option value="exclusiveNearest">Single Responder (Nearest)</option>
             <option value="collective">Collective (Simple)</option>
             <option value="zoned">Zoned (Sectorized)</option>
