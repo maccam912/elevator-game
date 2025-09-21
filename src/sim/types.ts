@@ -22,6 +22,8 @@ export interface ElevatorState {
 export interface FloorState {
   upQueue: Passenger[]
   downQueue: Passenger[]
+  claimedUpBy: number | null
+  claimedDownBy: number | null
 }
 
 export interface AlgorithmState {

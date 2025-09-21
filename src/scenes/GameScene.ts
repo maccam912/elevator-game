@@ -174,8 +174,10 @@ export class GameScene extends Phaser.Scene {
       this.gfx.fillRect(x + 2, barY, Math.max(0, (shaftWidth - 4) * capPct), barH)
 
       // targets markers
-      this.gfx.lineStyle(1, 0xff6b6b, 1)
+      const nextStop = this.sim.getNextStop(i)
       for (const t of elev.targets) {
+        const isNext = nextStop !== null && t === nextStop
+        this.gfx.lineStyle(1, isNext ? 0x58d68d : 0xff6b6b, 1)
         const ty = buildingBottom - t * this.floorHeight - 2
         this.gfx.beginPath(); this.gfx.moveTo(x + 2, ty); this.gfx.lineTo(x + shaftWidth - 2, ty); this.gfx.strokePath()
       }

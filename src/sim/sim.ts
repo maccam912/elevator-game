@@ -55,7 +55,12 @@ export class ElevatorSim {
       targets: new Set<number>(),
     }))
 
-    this.floorsState = Array.from({ length: this.floors }, () => ({ upQueue: [], downQueue: [] }))
+    this.floorsState = Array.from({ length: this.floors }, () => ({
+      upQueue: [],
+      downQueue: [],
+      claimedUpBy: null,
+      claimedDownBy: null,
+    }))
   }
 
   update(dt: number) {
@@ -142,25 +147,157 @@ export class ElevatorSim {
   }
 
   private applyAlgorithm() {
+    this.reconcileClaims()
+
+    const upCalls = [...this.hallUp]
+      .filter(f => this.isCallAvailable(f, 1))
+      .sort((a, b) => a - b)
+    const downCalls = [...this.hallDown]
+      .filter(f => this.isCallAvailable(f, -1))
+      .sort((a, b) => a - b)
+
     const state: AlgorithmState = {
       time: this.time,
       elevators: this.elevators.map(e => ({ ...e, targets: new Set(e.targets) })),
       floors: this.floors,
-      calls: { up: [...this.hallUp].sort((a,b)=>a-b), down: [...this.hallDown].sort((a,b)=>a-b) },
+      calls: { up: upCalls, down: downCalls },
     }
     const decisions = this.algorithm.decide(state)
     for (const d of decisions) {
       const e = this.elevators[d.elevator]
       if (!e) continue
+      let addedAny = false
       for (const floor of d.addTargets) {
-        if (floor >= 0 && floor < this.floors) e.targets.add(floor)
+        if (this.tryAssignTarget(e, floor)) addedAny = true
       }
-      // Set direction if idle, favoring directional service
-      if (e.direction === 0 && e.targets.size > 0) {
+      // Set direction immediately when a new target is taken while idle
+      if (addedAny && e.direction === 0 && e.targets.size > 0) {
         const next = nearestTargetDirectional(e)
         e.direction = next > e.position ? 1 : (next < e.position ? -1 : 0)
       }
     }
+  }
+
+  getNextStop(elevatorId: number): number | null {
+    const e = this.elevators[elevatorId]
+    if (!e || e.targets.size === 0) return null
+
+    const pos = e.position
+    if (e.direction > 0) {
+      let best = Number.POSITIVE_INFINITY
+      for (const t of e.targets) {
+        if (t >= pos && t < best) best = t
+      }
+      if (best !== Number.POSITIVE_INFINITY) return best
+
+      let fallback = Number.NEGATIVE_INFINITY
+      for (const t of e.targets) {
+        if (t < pos && t > fallback) fallback = t
+      }
+      if (fallback !== Number.NEGATIVE_INFINITY) return fallback
+    } else if (e.direction < 0) {
+      let best = Number.NEGATIVE_INFINITY
+      for (const t of e.targets) {
+        if (t <= pos && t > best) best = t
+      }
+      if (best !== Number.NEGATIVE_INFINITY) return best
+
+      let fallback = Number.POSITIVE_INFINITY
+      for (const t of e.targets) {
+        if (t > pos && t < fallback) fallback = t
+      }
+      if (fallback !== Number.POSITIVE_INFINITY) return fallback
+    } else {
+      return nearestTarget(e)
+    }
+
+    return nearestTarget(e)
+  }
+
+  private isCallAvailable(floor: number, dir: Direction): boolean {
+    if (floor < 0 || floor >= this.floors) return false
+    const fs = this.floorsState[floor]
+    if (!fs) return false
+    const claimed = dir > 0 ? fs.claimedUpBy : fs.claimedDownBy
+    return claimed == null
+  }
+
+  private reconcileClaims() {
+    for (let floor = 0; floor < this.floors; floor++) {
+      const fs = this.floorsState[floor]
+      if (!fs) continue
+
+      if (fs.upQueue.length === 0) {
+        fs.claimedUpBy = null
+      } else if (fs.claimedUpBy != null) {
+        const assigned = this.elevators[fs.claimedUpBy]
+        if (!assigned || !assigned.targets.has(floor)) fs.claimedUpBy = null
+      }
+
+      if (fs.downQueue.length === 0) {
+        fs.claimedDownBy = null
+      } else if (fs.claimedDownBy != null) {
+        const assigned = this.elevators[fs.claimedDownBy]
+        if (!assigned || !assigned.targets.has(floor)) fs.claimedDownBy = null
+      }
+    }
+  }
+
+  private tryAssignTarget(e: ElevatorState, floor: number): boolean {
+    if (floor < 0 || floor >= this.floors) return false
+    const fs = this.floorsState[floor]
+    if (!fs) return false
+
+    const upWaiting = fs.upQueue.length > 0
+    const downWaiting = fs.downQueue.length > 0
+
+    if (!upWaiting && !downWaiting) {
+      e.targets.add(floor)
+      return true
+    }
+
+    let claimed = false
+    const order = this.preferredClaimOrder(e, floor, fs)
+    for (const dir of order) {
+      if (dir === 0) continue
+      const waiting = dir > 0 ? upWaiting : downWaiting
+      if (!waiting) continue
+      const current = dir > 0 ? fs.claimedUpBy : fs.claimedDownBy
+      if (current === e.id) {
+        claimed = true
+        continue
+      }
+      if (current == null) {
+        if (dir > 0) fs.claimedUpBy = e.id
+        else fs.claimedDownBy = e.id
+        claimed = true
+      }
+    }
+
+    if (claimed) {
+      e.targets.add(floor)
+    }
+    return claimed
+  }
+
+  private preferredClaimOrder(e: ElevatorState, floor: number, fs: FloorState): Direction[] {
+    const order: Direction[] = []
+    const pushDir = (dir: Direction) => {
+      if (dir !== 0 && !order.includes(dir)) order.push(dir)
+    }
+
+    if (fs.claimedUpBy === e.id) pushDir(1)
+    if (fs.claimedDownBy === e.id) pushDir(-1)
+
+    const diff = floor - e.position
+    const approx: Direction = Math.abs(diff) < 0.01 ? 0 : (diff > 0 ? 1 : -1)
+    const preferred = approx !== 0 ? approx : e.direction
+    pushDir(preferred as Direction)
+
+    if (fs.upQueue.length > 0) pushDir(1)
+    if (fs.downQueue.length > 0) pushDir(-1)
+
+    return order
   }
 
   private updateElevator(e: ElevatorState, dt: number) {
@@ -248,8 +385,18 @@ export class ElevatorSim {
 
     // clear hall call if empty for that direction
     const fs = this.floorsState[floor]
-    if (fs.upQueue.length === 0) this.hallUp.delete(floor)
-    if (fs.downQueue.length === 0) this.hallDown.delete(floor)
+    if (fs.upQueue.length === 0) {
+      this.hallUp.delete(floor)
+      fs.claimedUpBy = null
+    } else if (fs.claimedUpBy === e.id) {
+      fs.claimedUpBy = null
+    }
+    if (fs.downQueue.length === 0) {
+      this.hallDown.delete(floor)
+      fs.claimedDownBy = null
+    } else if (fs.claimedDownBy === e.id) {
+      fs.claimedDownBy = null
+    }
   }
 
   private boardFromFloor(e: ElevatorState, floor: number, dir: Direction) {
