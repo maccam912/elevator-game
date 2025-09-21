@@ -5,6 +5,7 @@ export const DEFAULT_CONFIG: SimConfig = {
   elevators: 3,
   capacity: 8,
   speedFloorsPerSec: 1.5,
+  accelerationFloorsPerSec2: 1.5,
   stopDurationSec: 1.0,
   spawnRatePerMin: 40,
   algorithm: { name: 'Nearest', decide: () => [] },
@@ -18,6 +19,7 @@ export class ElevatorSim {
   readonly floorsState: FloorState[]
   private capacity: number
   private speed: number
+  private acceleration: number
   private stopDuration: number
   private spawnRate: number
   private algorithm: Algorithm
@@ -39,6 +41,7 @@ export class ElevatorSim {
     this.floors = cfg.floors
     this.capacity = cfg.capacity
     this.speed = cfg.speedFloorsPerSec
+    this.acceleration = Math.max(0.1, cfg.accelerationFloorsPerSec2 ?? cfg.speedFloorsPerSec)
     this.stopDuration = cfg.stopDurationSec
     this.spawnRate = cfg.spawnRatePerMin
     this.algorithm = cfg.algorithm
@@ -49,6 +52,7 @@ export class ElevatorSim {
       id: i,
       position: 0,
       direction: 0 as Direction,
+      velocity: 0,
       capacity: this.capacity,
       passengers: [],
       doorsOpen: false,
@@ -164,13 +168,16 @@ export class ElevatorSim {
   }
 
   private updateElevator(e: ElevatorState, dt: number) {
-    // Door timer stored on object as any
-    const anyE = e as any
+    const runtime = e as ElevatorState & { doorTimer?: number }
+    const arrivalThreshold = 0.02
+    const stopBuffer = 0.01
+
     if (e.doorsOpen) {
-      anyE.doorTimer = (anyE.doorTimer ?? this.stopDuration) - dt
-      if (anyE.doorTimer <= 0) {
+      e.velocity = 0
+      runtime.doorTimer = (runtime.doorTimer ?? this.stopDuration) - dt
+      if (runtime.doorTimer <= 0) {
         e.doorsOpen = false
-        anyE.doorTimer = undefined
+        runtime.doorTimer = undefined
         // decide next direction with directional commitment
         if (e.targets.size === 0 && e.passengers.length === 0) {
           e.direction = 0
@@ -189,6 +196,7 @@ export class ElevatorSim {
     }
 
     if (e.direction === 0) {
+      e.velocity = 0
       // remain idle unless targets exist
       if (e.targets.size > 0) {
         const next = nearestTarget(e)
@@ -197,25 +205,80 @@ export class ElevatorSim {
       return
     }
 
-    // Move
-    const sign = e.direction > 0 ? 1 : -1
-    e.position += sign * this.speed * dt
-    // Clamp to [0, floors-1]
-    if (e.position < 0) e.position = 0
-    if (e.position > this.floors - 1) e.position = this.floors - 1
+    const dir = e.direction
+    const prevPos = e.position
+    let velocity = e.velocity
 
-    // Check arrival near an integer floor that is a target, with small epsilon
-    const near = Math.round(e.position)
-    const atFloor = Math.abs(e.position - near) < 0.02
-    if (atFloor && e.targets.has(near)) {
-      e.position = near
-      this.handleStopAtFloor(e, near)
+    // If moving opposite of desired direction, slow to stop first
+    if (velocity * dir < 0) {
+      const speed = Math.abs(velocity)
+      const delta = Math.min(speed, this.acceleration * dt)
+      const newSpeed = speed - delta
+      const sign = Math.sign(velocity)
+      const avgSpeed = (speed + newSpeed) / 2
+      e.position = prevPos + sign * avgSpeed * dt
+      e.velocity = newSpeed > 1e-4 ? sign * newSpeed : 0
+      return
+    }
+
+    const targetFloor = nextTargetInDirection(e, dir)
+
+    if (targetFloor === null) {
+      // No upcoming stop: bleed off velocity
+      if (Math.abs(velocity) > 0) {
+        const speed = Math.abs(velocity)
+        const delta = Math.min(speed, this.acceleration * dt)
+        const newSpeed = speed - delta
+        const sign = Math.sign(velocity) || dir
+        const avgSpeed = (speed + newSpeed) / 2
+        e.position = prevPos + sign * avgSpeed * dt
+        e.velocity = newSpeed > 1e-4 ? sign * newSpeed : 0
+      } else {
+        e.velocity = 0
+      }
+      if (e.position < 0) { e.position = 0; e.velocity = 0 }
+      if (e.position > this.floors - 1) { e.position = this.floors - 1; e.velocity = 0 }
+      return
+    }
+
+    const prevDist = (targetFloor - prevPos) * dir
+    if (prevDist <= arrivalThreshold && Math.abs(velocity) < 0.05) {
+      e.position = targetFloor
+      e.velocity = 0
+      this.handleStopAtFloor(e, targetFloor)
+      return
+    }
+
+    const distanceAhead = Math.max(0, prevDist)
+    let targetSpeed = Math.sqrt(Math.max(0, 2 * this.acceleration * Math.max(0, distanceAhead - stopBuffer)))
+    if (!Number.isFinite(targetSpeed)) targetSpeed = 0
+    targetSpeed = Math.min(this.speed, targetSpeed)
+
+    let speed = Math.abs(velocity)
+    const maxDelta = this.acceleration * dt
+    if (speed < targetSpeed) speed = Math.min(targetSpeed, speed + maxDelta)
+    else if (speed > targetSpeed) speed = Math.max(targetSpeed, speed - maxDelta)
+
+    const newVelocity = dir * speed
+    const avgVelocity = (velocity + newVelocity) / 2
+    e.position = prevPos + avgVelocity * dt
+    e.velocity = Math.abs(newVelocity) > 1e-4 ? newVelocity : 0
+
+    if (e.position < 0) { e.position = 0; e.velocity = 0 }
+    if (e.position > this.floors - 1) { e.position = this.floors - 1; e.velocity = 0 }
+
+    const newDist = (targetFloor - e.position) * dir
+    if (newDist <= arrivalThreshold || (prevDist > 0 && newDist < 0)) {
+      e.position = targetFloor
+      e.velocity = 0
+      this.handleStopAtFloor(e, targetFloor)
     }
   }
 
   private handleStopAtFloor(e: ElevatorState, floor: number) {
     // open doors
     e.doorsOpen = true
+    e.velocity = 0
     // unload
     const remaining: Passenger[] = []
     for (const p of e.passengers) {
@@ -267,6 +330,25 @@ export class ElevatorSim {
     }
     return boarded
   }
+}
+
+function nextTargetInDirection(e: ElevatorState, dir: Direction): number | null {
+  if (dir === 0) return null
+  const pos = e.position
+  const eps = 1e-3
+  let best: number | null = null
+  if (dir > 0) {
+    for (const t of e.targets) {
+      if (t + eps < pos) continue
+      if (best === null || t < best) best = t
+    }
+  } else {
+    for (const t of e.targets) {
+      if (t - eps > pos) continue
+      if (best === null || t > best) best = t
+    }
+  }
+  return best
 }
 
 function nearestTarget(e: ElevatorState): number {

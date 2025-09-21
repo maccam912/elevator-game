@@ -13,6 +13,7 @@ export interface ElevatorState {
   id: number
   position: number // floor index (float while moving)
   direction: Direction
+  velocity: number // floors per second (signed)
   capacity: number
   passengers: Passenger[]
   doorsOpen: boolean
@@ -47,6 +48,7 @@ export interface SimConfig {
   elevators: number
   capacity: number
   speedFloorsPerSec: number
+  accelerationFloorsPerSec2?: number
   stopDurationSec: number
   spawnRatePerMin: number
   algorithm: Algorithm
