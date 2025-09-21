@@ -34,6 +34,7 @@ export class ElevatorSim {
 
   private hallUp = new Set<number>()
   private hallDown = new Set<number>()
+  private hallClaims = new Map<number, number>()
 
   constructor(cfg: SimConfig) {
     this.floors = cfg.floors
@@ -89,6 +90,12 @@ export class ElevatorSim {
       avgWaitSec: avgWait,
       maxWaitSec: this.maxWait,
     }
+  }
+
+  getNextStopFor(elevatorId: number): number | null {
+    const e = this.elevators[elevatorId]
+    if (!e || e.targets.size === 0) return null
+    return nearestTargetDirectional(e)
   }
 
   private spawnPassenger() {
@@ -149,18 +156,77 @@ export class ElevatorSim {
       calls: { up: [...this.hallUp].sort((a,b)=>a-b), down: [...this.hallDown].sort((a,b)=>a-b) },
     }
     const decisions = this.algorithm.decide(state)
+
+    const pendingAdds = new Map<number, Set<number>>()
+    const desiredClaims = new Map<number, number>()
+
     for (const d of decisions) {
       const e = this.elevators[d.elevator]
       if (!e) continue
-      for (const floor of d.addTargets) {
-        if (floor >= 0 && floor < this.floors) e.targets.add(floor)
+      let floorSet = pendingAdds.get(e.id)
+      if (!floorSet) {
+        floorSet = new Set<number>()
+        pendingAdds.set(e.id, floorSet)
       }
-      // Set direction if idle, favoring directional service
+      for (const floor of d.addTargets) {
+        if (floor < 0 || floor >= this.floors) continue
+        floorSet.add(floor)
+        if ((this.hallUp.has(floor) || this.hallDown.has(floor)) && !desiredClaims.has(floor)) {
+          desiredClaims.set(floor, e.id)
+        }
+      }
+    }
+
+    for (const [floor, owner] of this.hallClaims) {
+      if (!this.hallUp.has(floor) && !this.hallDown.has(floor)) continue
+      if (desiredClaims.has(floor)) continue
+      const current = this.elevators[owner]
+      if (!current) continue
+      const stillTargeted = current.targets.has(floor) || current.passengers.some(p => p.dest === floor)
+      if (!stillTargeted) continue
+      desiredClaims.set(floor, owner)
+    }
+
+    for (const [elevId, floors] of pendingAdds) {
+      const e = this.elevators[elevId]
+      if (!e) continue
+      for (const floor of floors) {
+        const isHall = this.hallUp.has(floor) || this.hallDown.has(floor)
+        if (isHall) {
+          const owner = desiredClaims.get(floor)
+          if (owner !== e.id) continue
+        }
+        e.targets.add(floor)
+      }
       if (e.direction === 0 && e.targets.size > 0) {
         const next = nearestTargetDirectional(e)
         e.direction = next > e.position ? 1 : (next < e.position ? -1 : 0)
       }
     }
+
+    for (const [floor, prevOwner] of this.hallClaims) {
+      const newOwner = desiredClaims.get(floor)
+      if (newOwner === prevOwner) continue
+      const prevElev = this.elevators[prevOwner]
+      if (!prevElev) continue
+      if (!prevElev.passengers.some(p => p.dest === floor)) {
+        prevElev.targets.delete(floor)
+      }
+    }
+
+    for (const e of this.elevators) {
+      const removals: number[] = []
+      for (const floor of e.targets) {
+        if (!this.hallUp.has(floor) && !this.hallDown.has(floor)) continue
+        const owner = desiredClaims.get(floor)
+        if (owner !== undefined && owner !== e.id && !e.passengers.some(p => p.dest === floor)) {
+          removals.push(floor)
+        }
+      }
+      for (const floor of removals) e.targets.delete(floor)
+    }
+
+    this.hallClaims = desiredClaims
   }
 
   private updateElevator(e: ElevatorState, dt: number) {
@@ -229,6 +295,17 @@ export class ElevatorSim {
     }
     e.passengers = remaining
     e.targets.delete(floor)
+
+    const claimOwner = this.hallClaims.get(floor)
+    if (claimOwner !== undefined) {
+      this.hallClaims.delete(floor)
+      if (claimOwner !== e.id) {
+        const other = this.elevators[claimOwner]
+        if (other && !other.passengers.some(p => p.dest === floor)) {
+          other.targets.delete(floor)
+        }
+      }
+    }
 
     // load in current moving direction first, then opposite if space
     const arrivingDir: Direction = e.direction
