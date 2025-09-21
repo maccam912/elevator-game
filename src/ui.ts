@@ -25,6 +25,56 @@ export function setupUI(game: Phaser.Game) {
   const manualDir = getEl<HTMLSelectElement>('manualDir')
   const manualCall = getEl<HTMLButtonElement>('manualCall')
 
+  const tabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.tab-button'))
+  const screens = Array.from(document.querySelectorAll<HTMLDivElement>('.screen'))
+  if (tabButtons.length && screens.length) {
+    let activeScreen = tabButtons.find(btn => btn.classList.contains('active'))?.dataset.screen ?? tabButtons[0]?.dataset.screen ?? ''
+    const tabMedia = window.matchMedia('(max-width: 900px)')
+
+    const applyTabState = () => {
+      if (!activeScreen) return
+      screens.forEach(screen => {
+        const isActive = screen.dataset.screen === activeScreen
+        screen.classList.toggle('active', isActive)
+        if (tabMedia.matches) {
+          screen.setAttribute('aria-hidden', isActive ? 'false' : 'true')
+        } else {
+          screen.setAttribute('aria-hidden', 'false')
+        }
+      })
+
+      tabButtons.forEach(btn => {
+        const isActive = btn.dataset.screen === activeScreen
+        btn.classList.toggle('active', isActive)
+        btn.setAttribute('aria-selected', isActive ? 'true' : 'false')
+        if (tabMedia.matches) {
+          btn.setAttribute('tabindex', isActive ? '0' : '-1')
+        } else {
+          btn.setAttribute('tabindex', '0')
+        }
+      })
+    }
+
+    const setActiveScreen = (target: string) => {
+      if (!target || target === activeScreen) return
+      activeScreen = target
+      applyTabState()
+    }
+
+    tabButtons.forEach(btn => {
+      btn.addEventListener('click', () => setActiveScreen(btn.dataset.screen ?? ''))
+    })
+
+    const handleTabMediaChange = () => applyTabState()
+    if (typeof tabMedia.addEventListener === 'function') {
+      tabMedia.addEventListener('change', handleTabMediaChange)
+    } else {
+      tabMedia.addListener(handleTabMediaChange)
+    }
+
+    applyTabState()
+  }
+
   const defaultCustom = `// Example custom algorithm
 // state: { time, elevators:[{ position, direction, capacity, passengers:[{dest}] }], floors, calls:{up:[],down:[]} }
 function decide(state){
