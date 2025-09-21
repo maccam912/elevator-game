@@ -6,6 +6,10 @@ import { setupUI } from './ui'
 const app = document.querySelector<HTMLDivElement>('#app')!
 
 app.innerHTML = `
+  <div id="mobileControls" class="mobile-controls">
+    <button type="button" data-target="game" class="active">Elevators</button>
+    <button type="button" data-target="sidebar">Control Panel</button>
+  </div>
   <div id="gameParent"></div>
   <div id="sidebar">
     <h1 class="title">Elevator Simulator</h1>
@@ -110,6 +114,8 @@ app.innerHTML = `
   </div>
 `
 
+app.dataset.view = 'game'
+
 const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'gameParent',
@@ -126,3 +132,54 @@ const game = new Phaser.Game({
 })
 
 setupUI(game)
+
+setupMobileLayout(app, game)
+
+type ViewMode = 'game' | 'sidebar'
+
+function setupMobileLayout(container: HTMLDivElement, game: Phaser.Game) {
+  const controls = document.getElementById('mobileControls') as HTMLDivElement | null
+  if (!controls) return
+
+  const buttons = Array.from(controls.querySelectorAll<HTMLButtonElement>('button[data-target]'))
+  if (!buttons.length) return
+
+  const setActive = (target: ViewMode) => {
+    container.dataset.view = target
+    buttons.forEach((btn) => {
+      const isActive = btn.dataset.target === target
+      btn.classList.toggle('active', isActive)
+      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false')
+    })
+
+    if (target === 'game') {
+      setTimeout(() => {
+        game.scale.refresh()
+      }, 0)
+    }
+  }
+
+  buttons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.target === 'sidebar' ? 'sidebar' : 'game'
+      setActive(target)
+    })
+  })
+
+  const mediaQuery = window.matchMedia('(min-width: 901px)')
+  const handleMediaChange = () => {
+    if (mediaQuery.matches || container.dataset.view === 'game') {
+      setTimeout(() => {
+        game.scale.refresh()
+      }, 0)
+    }
+  }
+
+  if (typeof mediaQuery.addEventListener === 'function') {
+    mediaQuery.addEventListener('change', handleMediaChange)
+  } else if (typeof mediaQuery.addListener === 'function') {
+    mediaQuery.addListener(handleMediaChange)
+  }
+
+  setActive((container.dataset.view as ViewMode) ?? 'game')
+}

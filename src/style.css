@@ -221,3 +221,63 @@ button.primary:hover { background: #183650; }
 .badge { border:1px solid #2a2f3a; border-radius:999px; padding:2px 8px; font-size:12px; }
 .badge.up { color:#58d68d; }
 .badge.down { color:#ff6b6b; }
+
+.mobile-controls {
+  display: none;
+  gap: 8px;
+}
+
+.mobile-controls button.active {
+  background: #173047;
+  border-color: #21435e;
+}
+
+@media (max-width: 900px) {
+  body {
+    display: block;
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    grid-template-columns: none;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  .mobile-controls {
+    display: flex;
+    padding: 12px 14px;
+    background: #151a21;
+    border-bottom: 1px solid #1f2630;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .mobile-controls button {
+    flex: 1 1 auto;
+    width: auto;
+  }
+
+  #app > #gameParent,
+  #app > #sidebar {
+    flex: 1 1 auto;
+    display: none;
+  }
+
+  #app[data-view='game'] > #gameParent,
+  #app[data-view='sidebar'] > #sidebar {
+    display: block;
+  }
+
+  #gameParent {
+    min-height: 0;
+  }
+
+  #sidebar {
+    border-left: none;
+    border-top: 1px solid #1f2630;
+    overflow-y: auto;
+  }
+}
