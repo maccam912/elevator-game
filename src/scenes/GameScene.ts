@@ -129,6 +129,11 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  private getWorldHeight() {
+    const floors = Math.max(1, this.sim?.floors ?? 1)
+    return this.topMargin + (floors - 1) * this.floorHeight + this.topMargin
+  }
+
   private setupCameraControls() {
     this.input.on('pointerdown', this.handlePointerDown, this)
     this.input.on('pointerup', this.handlePointerUp, this)
@@ -284,13 +289,19 @@ export class GameScene extends Phaser.Scene {
     if (!this.sim) return
 
     const width = this.scale.width
-    const height = Math.max(this.scale.height, this.topMargin + (this.sim.floors - 1) * this.floorHeight + this.topMargin)
+    const worldHeight = this.getWorldHeight()
+    const boundsHeight = Math.max(this.scale.height, worldHeight)
     const cam = this.cameras.main
-    cam.setBounds(-this.boundsPadding.x, -this.boundsPadding.y, width + this.boundsPadding.x * 2, height + this.boundsPadding.y * 2)
+    cam.setBounds(
+      -this.boundsPadding.x,
+      -this.boundsPadding.y,
+      width + this.boundsPadding.x * 2,
+      boundsHeight + this.boundsPadding.y * 2
+    )
     if (fitCamera) {
-      const fitZoom = Phaser.Math.Clamp(Math.min(1, this.scale.height / height), this.minZoom, this.maxZoom)
+      const fitZoom = Phaser.Math.Clamp(Math.min(1, this.scale.height / boundsHeight), this.minZoom, this.maxZoom)
       cam.setZoom(fitZoom)
-      cam.centerOn(width / 2, this.scale.height / 2)
+      cam.centerOn(width / 2, boundsHeight / 2)
     }
     this.constrainCamera()
   }
@@ -316,7 +327,7 @@ export class GameScene extends Phaser.Scene {
 
   private draw() {
     const width = this.scale.width
-    const height = this.scale.height
+    const height = Math.max(this.scale.height, this.getWorldHeight())
     this.gfx.clear()
 
     // Building bounds
