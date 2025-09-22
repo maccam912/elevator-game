@@ -50,87 +50,119 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
-/* App layout overrides for the simulator */
 html, body, #app { height: 100%; }
 
 #app {
-  display: grid;
-  grid-template-columns: 1fr 340px;
-  grid-template-rows: 100%;
-  gap: 0;
-  height: 100%;
-  max-width: none;
-  padding: 0;
-  width: 100%;
-}
-
-#gameParent {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-}
-
-#sidebar {
   display: flex;
+}
+
+.app-shell {
+  display: flex;
+  flex: 1;
   flex-direction: column;
+  min-height: 0;
+  background: #0f1216;
+}
+
+.top-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 16px 24px;
   background: #151a21;
-  border-left: 1px solid #1f2630;
-  padding: 18px 20px 96px;
-  overflow-y: auto;
-  text-align: left;
-  gap: 24px;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-}
-
-.sidebar-header {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-bottom: 4px;
-  padding-bottom: 16px;
   border-bottom: 1px solid #1f2630;
+  position: sticky;
+  top: 0;
+  z-index: 5;
 }
 
-.tab-bar {
-  display: none;
-  gap: 8px;
-  background: #10141b;
-  border: 1px solid #1f2630;
-  border-radius: 999px;
-  padding: 4px;
+.brand .title {
+  margin: 0;
+  font-size: 1.35rem;
 }
 
-.tab-button {
+.nav-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.nav-button {
   border-radius: 999px;
   border-color: #1f2630;
   background: #11151b;
   color: #a5b0bf;
-  flex: 1;
-  padding: 0.45em 0.8em;
-  font-size: 0.9rem;
+  padding: 0.5em 1.1em;
+  font-size: 0.95rem;
 }
 
-.tab-button.active {
+.nav-button.active {
   background: #173047;
   border-color: #21435e;
   color: #e7ecf3;
 }
 
-h1.title {
-  font-size: 18px;
-  margin: 0 0 12px;
+#viewContainer {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+  background: #0f1216;
 }
 
-.screen {
+.view {
+  position: absolute;
+  inset: 0;
+  display: none;
+  box-sizing: border-box;
+  padding: 24px 28px;
+  overflow: auto;
+}
+
+.view.active {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 24px;
+  min-height: 0;
 }
 
-.screen:not(.active) {
-  transition: none;
+#view-sim {
+  padding: 0;
+  overflow: hidden;
+}
+
+#view-sim #gameParent {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.panel {
+  width: min(940px, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 8px 0 64px;
+  box-sizing: border-box;
+}
+
+.panel .section {
+  background: #151a21;
+  border: 1px solid #1f2630;
+  border-radius: 12px;
+  padding: 20px 20px 24px;
+  box-shadow: 0 12px 28px rgba(5, 10, 18, 0.45);
+}
+
+h1.title {
+  font-size: 18px;
+  margin: 0 0 14px;
 }
 
 .section { margin: 0; }
@@ -139,7 +171,7 @@ h1.title {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 8px 0;
+  margin: 10px 0;
 }
 
 label {
@@ -148,7 +180,7 @@ label {
 }
 
 .row label {
-  flex: 0 0 140px;
+  flex: 0 0 160px;
 }
 
 .row > *:not(label) {
@@ -170,6 +202,7 @@ input[type="range"], select, input[type="number"], textarea {
 }
 
 input[type="range"] { padding: 0; }
+
 button.primary {
   background: #173047;
   border-color: #21435e;
@@ -183,44 +216,45 @@ button.primary:hover {
 .grid-two {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 12px;
 }
 
 .stats {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 12px;
 }
+
 .stat {
   background: #11151b;
   border: 1px solid #2a2f3a;
   border-radius: 6px;
-  padding: 10px;
+  padding: 12px;
 }
+
 .stat .label { color: #a5b0bf; font-size: 11px; }
-.stat .value { font-size: 16px; margin-top: 4px; }
+.stat .value { font-size: 16px; margin-top: 6px; }
 
 .danger { color: #ff6b6b; }
 .ok { color: #58d68d; }
 .warn { color: #ffd166; }
 .small { font-size: 12px; color: #a5b0bf; }
-#sidebar .row .small { text-align: right; }
 
 .code-editor {
   width: 100%;
   min-height: 160px;
   resize: vertical;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    "Liberation Mono", "Courier New", monospace;
+    'Liberation Mono', 'Courier New', monospace;
 }
 
 /* Fleet list */
-.fleet-list { display: grid; gap: 6px; }
+.fleet-list { display: grid; gap: 8px; }
 .fleet-row {
   display: grid;
   grid-template-columns: 38px 1fr 56px 64px;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   background: #11151b;
   border: 1px solid #2a2f3a;
   border-radius: 6px;
@@ -242,55 +276,37 @@ button.primary:hover {
 .bar { background:#0b0e13; border:1px solid #2a2f3a; border-radius:4px; height:10px; overflow:hidden; }
 .bar-fill { background:#ffd166; height:100%; width:0%; }
 
-.floor-calls { display:grid; gap:6px; }
-.call-row { display:flex; justify-content:space-between; align-items:center; background:#11151b; border:1px solid #2a2f3a; border-radius:6px; padding:6px 8px; }
+.floor-calls { display:grid; gap:8px; }
+.call-row { display:flex; justify-content:space-between; align-items:center; background:#11151b; border:1px solid #2a2f3a; border-radius:6px; padding:8px 10px; }
 .badge { border:1px solid #2a2f3a; border-radius:999px; padding:2px 8px; font-size:12px; }
 .badge.up { color:#58d68d; }
 .badge.down { color:#ff6b6b; }
 
+@media (max-width: 1100px) {
+  .panel {
+    width: min(840px, 100%);
+  }
+}
+
 @media (max-width: 900px) {
-  #app {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(280px, 55vh) minmax(0, 1fr);
-    height: auto;
+  .top-nav {
+    padding: 12px 16px;
   }
 
-  #gameParent {
-    min-height: 280px;
+  .nav-bar {
+    justify-content: flex-start;
   }
 
-  #sidebar {
-    border-left: none;
-    border-top: 1px solid #1f2630;
-    padding: 16px 16px 80px;
-    gap: 20px;
+  .view {
+    padding: 18px 20px;
   }
 
-  .sidebar-header {
-    position: sticky;
-    top: 0;
-    background: #151a21;
-    padding-top: 8px;
-    padding-bottom: 16px;
-    margin-bottom: 0;
-    z-index: 2;
+  .panel {
+    padding: 0 0 48px;
   }
 
-  .tab-bar {
-    display: flex;
-  }
-
-  .tab-button {
-    font-size: 1rem;
-    padding: 0.55em 0.9em;
-  }
-
-  .screen {
-    display: none;
-  }
-
-  .screen.active {
-    display: flex;
+  .panel .section {
+    padding: 16px 16px 20px;
   }
 
   .row {
@@ -326,6 +342,7 @@ button.primary:hover {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
+    gap: 8px;
   }
 
   .call-row {
@@ -336,19 +353,25 @@ button.primary:hover {
 }
 
 @media (max-width: 600px) {
-  #gameParent {
-    min-height: 240px;
-  }
-
-  .tab-bar {
-    padding: 6px;
-  }
-
   button {
     font-size: 1rem;
   }
 
-  #sidebar {
-    padding: 14px 14px 72px;
+  .view {
+    padding: 16px;
+  }
+
+  .top-nav {
+    padding: 12px 14px;
+    gap: 12px;
+  }
+
+  .nav-bar {
+    gap: 8px;
+  }
+
+  .nav-button {
+    padding: 0.55em 0.9em;
+    font-size: 1rem;
   }
 }

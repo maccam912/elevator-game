@@ -21,6 +21,17 @@ export class GameScene extends Phaser.Scene {
   private topMargin = 40
   private shaftGap = 20
   private elevatorWidth = 40
+  private dragPointerId: number | null = null
+  private dragStart = new Phaser.Math.Vector2()
+  private cameraStart = new Phaser.Math.Vector2()
+  private pinchPrimary: Phaser.Input.Pointer | null = null
+  private pinchSecondary: Phaser.Input.Pointer | null = null
+  private pinchStartDistance = 0
+  private pinchStartZoom = 1
+  private minZoom = 0.5
+  private maxZoom = 2.5
+  private tmpVec = new Phaser.Math.Vector2()
+  private tmpVec2 = new Phaser.Math.Vector2()
 
   constructor() {
     super(GameScene.KEY)
@@ -29,6 +40,23 @@ export class GameScene extends Phaser.Scene {
   create() {
     this.gfx = this.add.graphics()
     this.resetSim()
+
+    this.cameras.main.setZoom(1)
+    this.input.addPointer(2)
+    this.input.mouse?.disableContextMenu()
+    this.input.on('pointerdown', this.handlePointerDown, this)
+    this.input.on('pointerup', this.handlePointerUp, this)
+    this.input.on('pointerupoutside', this.handlePointerUp, this)
+    this.input.on('pointermove', this.handlePointerMove, this)
+    this.input.on('wheel', this.handleWheel, this)
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.input.off('pointerdown', this.handlePointerDown, this)
+      this.input.off('pointerup', this.handlePointerUp, this)
+      this.input.off('pointerupoutside', this.handlePointerUp, this)
+      this.input.off('pointermove', this.handlePointerMove, this)
+      this.input.off('wheel', this.handleWheel, this)
+    })
 
     // Listen for UI events via game registry
     this.game.events.on('sim:apply', (cfg: Partial<SimConfig> & { algorithm: AlgorithmKind }) => {
@@ -97,6 +125,7 @@ export class GameScene extends Phaser.Scene {
 
   private resizeForFloors() {
     this.calcLayout()
+    this.updateCameraBounds()
   }
 
   private draw() {
@@ -205,6 +234,142 @@ export class GameScene extends Phaser.Scene {
       this.addText(`↑${upQ}`, buildingLeft - 100, y - 16, 0x58d68d)
       this.addText(`↓${dnQ}`, buildingLeft - 100, y + 4, 0xff6b6b)
     }
+  }
+
+  private startDrag(pointer: Phaser.Input.Pointer) {
+    this.dragPointerId = pointer.id
+    this.dragStart.set(pointer.x, pointer.y)
+    this.cameraStart.set(this.cameras.main.scrollX, this.cameras.main.scrollY)
+  }
+
+  private beginPinch() {
+    if (this.pinchPrimary && this.pinchSecondary) {
+      this.dragPointerId = null
+      this.pinchStartZoom = this.cameras.main.zoom
+      const dist = Phaser.Math.Distance.Between(
+        this.pinchPrimary.x,
+        this.pinchPrimary.y,
+        this.pinchSecondary.x,
+        this.pinchSecondary.y,
+      )
+      this.pinchStartDistance = Math.max(0.0001, dist)
+    }
+  }
+
+  private handlePointerDown(pointer: Phaser.Input.Pointer) {
+    const pointerType = this.resolvePointerType(pointer)
+    if (pointerType === 'mouse') {
+      if (pointer.button === 0) {
+        this.startDrag(pointer)
+      }
+      return
+    }
+
+    if (!this.pinchPrimary) {
+      this.pinchPrimary = pointer
+      this.startDrag(pointer)
+    } else if (!this.pinchSecondary && pointer.id !== this.pinchPrimary.id) {
+      this.pinchSecondary = pointer
+      this.beginPinch()
+    }
+  }
+
+  private handlePointerUp(pointer: Phaser.Input.Pointer) {
+    if (pointer.id === this.dragPointerId) {
+      this.dragPointerId = null
+    }
+
+    if (this.pinchPrimary && pointer.id === this.pinchPrimary.id) {
+      this.pinchPrimary = this.pinchSecondary
+      this.pinchSecondary = null
+      if (this.pinchPrimary && this.pinchPrimary.isDown) {
+        this.startDrag(this.pinchPrimary)
+      }
+    } else if (this.pinchSecondary && pointer.id === this.pinchSecondary.id) {
+      this.pinchSecondary = null
+      if (this.pinchPrimary && this.pinchPrimary.isDown) {
+        this.startDrag(this.pinchPrimary)
+      }
+    }
+
+    if (!this.pinchSecondary) {
+      this.pinchStartDistance = 0
+    }
+  }
+
+  private handlePointerMove(pointer: Phaser.Input.Pointer) {
+    if (this.pinchPrimary && this.pinchSecondary) {
+      if (pointer.id === this.pinchPrimary.id || pointer.id === this.pinchSecondary.id) {
+        const dist = Phaser.Math.Distance.Between(
+          this.pinchPrimary.x,
+          this.pinchPrimary.y,
+          this.pinchSecondary.x,
+          this.pinchSecondary.y,
+        )
+        if (dist > 0.0001) {
+          const base = Math.max(0.0001, this.pinchStartDistance)
+          const ratio = dist / base
+          const targetZoom = this.pinchStartZoom * ratio
+          const centerX = (this.pinchPrimary.x + this.pinchSecondary.x) / 2
+          const centerY = (this.pinchPrimary.y + this.pinchSecondary.y) / 2
+          this.setZoomAroundPoint(targetZoom, centerX, centerY)
+          this.pinchStartZoom = this.cameras.main.zoom
+          this.pinchStartDistance = dist
+        }
+      }
+      return
+    }
+
+    if (this.dragPointerId === pointer.id && pointer.isDown) {
+      const cam = this.cameras.main
+      const dx = pointer.x - this.dragStart.x
+      const dy = pointer.y - this.dragStart.y
+      cam.scrollX = this.cameraStart.x - dx / cam.zoom
+      cam.scrollY = this.cameraStart.y - dy / cam.zoom
+    }
+  }
+
+  private handleWheel(
+    pointer: Phaser.Input.Pointer,
+    _gameObjects: Phaser.GameObjects.GameObject[],
+    _deltaX: number,
+    deltaY: number,
+    _deltaZ: number,
+    event: WheelEvent,
+  ) {
+    event.preventDefault()
+    const cam = this.cameras.main
+    const targetZoom = cam.zoom * Math.exp(-deltaY * 0.0015)
+    this.setZoomAroundPoint(targetZoom, pointer.x, pointer.y)
+  }
+
+  private setZoomAroundPoint(targetZoom: number, screenX: number, screenY: number) {
+    const cam = this.cameras.main
+    const clamped = Phaser.Math.Clamp(targetZoom, this.minZoom, this.maxZoom)
+    if (clamped === cam.zoom) return
+
+    cam.getWorldPoint(screenX, screenY, this.tmpVec)
+    cam.setZoom(clamped)
+    cam.getWorldPoint(screenX, screenY, this.tmpVec2)
+    cam.scrollX += this.tmpVec.x - this.tmpVec2.x
+    cam.scrollY += this.tmpVec.y - this.tmpVec2.y
+  }
+
+  private resolvePointerType(pointer: Phaser.Input.Pointer): 'mouse' | 'touch' | 'pen' {
+    const raw = (pointer as any).pointerType ?? (pointer.event as any)?.pointerType
+    if (raw === 'mouse') return 'mouse'
+    if (raw === 'pen') return 'pen'
+    if (raw === 'touch') return 'touch'
+    if ((pointer as any).isMouse || pointer.event instanceof MouseEvent) return 'mouse'
+    return 'touch'
+  }
+
+  private updateCameraBounds() {
+    const width = this.scale.width
+    const height = this.scale.height
+    const marginX = Math.max(200, width * 0.5)
+    const marginY = Math.max(200, height * 0.5)
+    this.cameras.main.setBounds(-marginX, -marginY, width + marginX * 2, height + marginY * 2)
   }
 
   private addText(text: string, x: number, y: number, color: number) {
