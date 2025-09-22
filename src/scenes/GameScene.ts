@@ -284,15 +284,25 @@ export class GameScene extends Phaser.Scene {
     if (!this.sim) return
 
     const width = this.scale.width
-    const height = Math.max(this.scale.height, this.topMargin + (this.sim.floors - 1) * this.floorHeight + this.topMargin)
+    const buildingHeight = Math.max(0, (this.sim.floors - 1) * this.floorHeight)
+    const height = Math.max(this.scale.height, this.topMargin + buildingHeight + this.topMargin)
     const cam = this.cameras.main
     cam.setBounds(-this.boundsPadding.x, -this.boundsPadding.y, width + this.boundsPadding.x * 2, height + this.boundsPadding.y * 2)
     if (fitCamera) {
       const fitZoom = Phaser.Math.Clamp(Math.min(1, this.scale.height / height), this.minZoom, this.maxZoom)
       cam.setZoom(fitZoom)
-      cam.centerOn(width / 2, this.scale.height / 2)
+      cam.centerOn(width / 2, height / 2)
     }
     this.constrainCamera()
+  }
+
+  private getBuildingLayout() {
+    const buildingHeight = Math.max(0, (this.sim.floors - 1) * this.floorHeight)
+    const usableHeight = Math.max(0, this.scale.height - this.topMargin * 2)
+    const offset = Math.max(0, usableHeight - buildingHeight)
+    const top = this.topMargin + offset
+    const bottom = top + buildingHeight
+    return { top, bottom }
   }
 
   private cancelGestures() {
@@ -316,14 +326,12 @@ export class GameScene extends Phaser.Scene {
 
   private draw() {
     const width = this.scale.width
-    const height = this.scale.height
+    const { top: buildingTop, bottom: buildingBottom } = this.getBuildingLayout()
     this.gfx.clear()
 
     // Building bounds
     const buildingLeft = this.leftMargin
     const buildingRight = width - 40
-    const buildingTop = this.topMargin
-    const buildingBottom = height - this.topMargin
 
     // Draw floors
     this.gfx.lineStyle(1, 0x384253, 1)
