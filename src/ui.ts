@@ -25,54 +25,41 @@ export function setupUI(game: Phaser.Game) {
   const manualDir = getEl<HTMLSelectElement>('manualDir')
   const manualCall = getEl<HTMLButtonElement>('manualCall')
 
-  const tabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.tab-button'))
-  const screens = Array.from(document.querySelectorAll<HTMLDivElement>('.screen'))
-  if (tabButtons.length && screens.length) {
-    let activeScreen = tabButtons.find(btn => btn.classList.contains('active'))?.dataset.screen ?? tabButtons[0]?.dataset.screen ?? ''
-    const tabMedia = window.matchMedia('(max-width: 900px)')
+  const navButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.nav-link'))
+  const views = Array.from(document.querySelectorAll<HTMLElement>('.view'))
+  if (navButtons.length && views.length) {
+    let activeView = navButtons.find(btn => btn.classList.contains('active'))?.dataset.view ?? navButtons[0]?.dataset.view ?? ''
 
-    const applyTabState = () => {
-      if (!activeScreen) return
-      screens.forEach(screen => {
-        const isActive = screen.dataset.screen === activeScreen
-        screen.classList.toggle('active', isActive)
-        if (tabMedia.matches) {
-          screen.setAttribute('aria-hidden', isActive ? 'false' : 'true')
-        } else {
-          screen.setAttribute('aria-hidden', 'false')
-        }
+    const applyNavState = () => {
+      if (!activeView) return
+      views.forEach(view => {
+        const isActive = view.dataset.view === activeView
+        view.classList.toggle('active', isActive)
+        view.setAttribute('aria-hidden', isActive ? 'false' : 'true')
       })
 
-      tabButtons.forEach(btn => {
-        const isActive = btn.dataset.screen === activeScreen
+      navButtons.forEach(btn => {
+        const isActive = btn.dataset.view === activeView
         btn.classList.toggle('active', isActive)
         btn.setAttribute('aria-selected', isActive ? 'true' : 'false')
-        if (tabMedia.matches) {
-          btn.setAttribute('tabindex', isActive ? '0' : '-1')
-        } else {
-          btn.setAttribute('tabindex', '0')
-        }
+        btn.setAttribute('tabindex', isActive ? '0' : '-1')
       })
     }
 
-    const setActiveScreen = (target: string) => {
-      if (!target || target === activeScreen) return
-      activeScreen = target
-      applyTabState()
+    const setActiveView = (target: string) => {
+      if (!target || target === activeView) return
+      activeView = target
+      applyNavState()
+      if (target === 'sim') {
+        game.scale.updateBounds()
+      }
     }
 
-    tabButtons.forEach(btn => {
-      btn.addEventListener('click', () => setActiveScreen(btn.dataset.screen ?? ''))
+    navButtons.forEach(btn => {
+      btn.addEventListener('click', () => setActiveView(btn.dataset.view ?? ''))
     })
 
-    const handleTabMediaChange = () => applyTabState()
-    if (typeof tabMedia.addEventListener === 'function') {
-      tabMedia.addEventListener('change', handleTabMediaChange)
-    } else {
-      tabMedia.addListener(handleTabMediaChange)
-    }
-
-    applyTabState()
+    applyNavState()
   }
 
   const defaultCustom = `// Example custom algorithm
@@ -110,8 +97,9 @@ function decide(state){
   updateLobbyLabel()
 
   algorithmSelect.addEventListener('change', () => {
-    customSection.style.display = algorithmSelect.value === 'custom' ? 'block' : 'none'
+    customSection.style.display = algorithmSelect.value === 'custom' ? 'flex' : 'none'
   })
+  customSection.style.display = algorithmSelect.value === 'custom' ? 'flex' : 'none'
 
   applyBtn.addEventListener('click', () => {
     const floors = clamp(parseInt(floorsInput.value || '10', 10), 2, 50)
