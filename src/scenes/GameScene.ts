@@ -22,19 +22,37 @@ export class GameScene extends Phaser.Scene {
   private shaftGap = 20
   private elevatorWidth = 40
 
+  private viewWidth = 0
+  private viewHeight = 0
+  private boundsPadding = { x: 140, y: 140 }
+
+  private minZoom = 0.2
+  private maxZoom = 4
+  private activePointers = new Map<number, Phaser.Math.Vector2>()
+  private panPointerId: number | null = null
+  private panStart = new Phaser.Math.Vector2()
+  private panScrollStart = new Phaser.Math.Vector2()
+  private isPanning = false
+  private pinchStartDistance: number | null = null
+  private pinchStartZoom = 1
+
   constructor() {
     super(GameScene.KEY)
   }
 
   create() {
     this.gfx = this.add.graphics()
-    this.resetSim()
+    this.viewWidth = this.scale.width
+    this.viewHeight = this.scale.height
+    this.input.addPointer(2)
+    this.setupCameraControls()
+    this.resetSim(true)
 
     // Listen for UI events via game registry
     this.game.events.on('sim:apply', (cfg: Partial<SimConfig> & { algorithm: AlgorithmKind }) => {
       this.config = { ...this.config, ...cfg }
       this.algorithmKind = cfg.algorithm
-      this.resetSim()
+      this.resetSim(true)
     })
 
     this.game.events.on('sim:togglePause', () => {
@@ -44,7 +62,7 @@ export class GameScene extends Phaser.Scene {
     this.game.events.on('sim:customAlgorithm', (code: string) => {
       this.customBuilder = new CustomAlgorithmBuilder(code)
       this.algorithmKind = 'custom'
-      this.resetSim()
+      this.resetSim(true)
     })
 
     this.game.events.on('sim:manualCall', ({ floor, dir }: { floor: number; dir: 1 | -1 }) => {
@@ -53,7 +71,8 @@ export class GameScene extends Phaser.Scene {
     })
   }
 
-  private resetSim() {
+  private resetSim(fitCamera = true) {
+    this.cancelGestures()
     let algorithm
     if (this.algorithmKind === 'custom' && this.customBuilder) {
       algorithm = this.customBuilder.build()
@@ -61,9 +80,16 @@ export class GameScene extends Phaser.Scene {
       algorithm = Algorithms[this.algorithmKind as Exclude<AlgorithmKind, 'custom'>]
     }
     this.sim = new ElevatorSim({ ...this.config, algorithm })
+    this.floorHeight = 60
+    this.refreshCameraBounds(fitCamera)
   }
 
   update(_time: number, deltaMs: number) {
+    if (this.scale.width !== this.viewWidth || this.scale.height !== this.viewHeight) {
+      this.viewWidth = this.scale.width
+      this.viewHeight = this.scale.height
+      this.refreshCameraBounds(false)
+    }
     this.resizeForFloors()
     if (!this.paused) {
       this.sim.update(deltaMs / 1000)
@@ -96,7 +122,196 @@ export class GameScene extends Phaser.Scene {
   }
 
   private resizeForFloors() {
+    const prev = this.floorHeight
     this.calcLayout()
+    if (this.floorHeight !== prev) {
+      this.refreshCameraBounds(false)
+    }
+  }
+
+  private setupCameraControls() {
+    this.input.on('pointerdown', this.handlePointerDown, this)
+    this.input.on('pointerup', this.handlePointerUp, this)
+    this.input.on('pointerupoutside', this.handlePointerUp, this)
+    this.input.on('pointermove', this.handlePointerMove, this)
+    this.input.on('gameout', this.cancelGestures, this)
+    this.input.on('wheel', this.handleWheel, this)
+  }
+
+  private handlePointerDown(pointer: Phaser.Input.Pointer) {
+    if (!pointer.isDown) return
+    const rawEvent = pointer.event as { button?: number } | undefined
+    if (rawEvent && typeof rawEvent.button === 'number' && rawEvent.button !== 0) return
+    if (this.activePointers.size >= 2) return
+
+    this.activePointers.set(pointer.id, new Phaser.Math.Vector2(pointer.x, pointer.y))
+    if (this.activePointers.size === 1) {
+      this.beginPan(pointer)
+    } else if (this.activePointers.size === 2) {
+      this.beginPinch()
+    }
+  }
+
+  private handlePointerUp(pointer: Phaser.Input.Pointer) {
+    if (this.activePointers.has(pointer.id)) {
+      this.activePointers.delete(pointer.id)
+    }
+
+    if (pointer.id === this.panPointerId) {
+      this.isPanning = false
+      this.panPointerId = null
+      this.setDraggingCursor(false)
+    }
+
+    if (this.activePointers.size < 2) {
+      this.pinchStartDistance = null
+    }
+
+    if (this.activePointers.size === 1) {
+      const remaining = this.activePointers.keys().next()
+      const remainingId = typeof remaining.value === 'number' ? remaining.value : null
+      if (remainingId !== null) {
+        const remainingPointer = this.findPointerById(remainingId)
+        if (remainingPointer?.isDown) {
+          this.beginPan(remainingPointer)
+        }
+      }
+    }
+
+    if (this.activePointers.size === 0) {
+      this.cancelGestures()
+    }
+  }
+
+  private handlePointerMove(pointer: Phaser.Input.Pointer) {
+    const stored = this.activePointers.get(pointer.id)
+    if (stored) {
+      stored.set(pointer.x, pointer.y)
+    }
+
+    if (this.activePointers.size === 2) {
+      if (this.pinchStartDistance === null) {
+        this.beginPinch()
+      }
+      const points = Array.from(this.activePointers.values())
+      if (points.length >= 2 && this.pinchStartDistance && this.pinchStartDistance > 0) {
+        const newDistance = Phaser.Math.Distance.Between(points[0].x, points[0].y, points[1].x, points[1].y)
+        const scale = Phaser.Math.Clamp(newDistance / this.pinchStartDistance, 0.05, 20)
+        const focus = { x: (points[0].x + points[1].x) / 2, y: (points[0].y + points[1].y) / 2 }
+        this.applyZoom(this.pinchStartZoom * scale, focus)
+      }
+      return
+    }
+
+    if (this.isPanning && pointer.id === this.panPointerId && pointer.isDown) {
+      const cam = this.cameras.main
+      const dx = pointer.x - this.panStart.x
+      const dy = pointer.y - this.panStart.y
+      cam.scrollX = this.panScrollStart.x - dx / cam.zoom
+      cam.scrollY = this.panScrollStart.y - dy / cam.zoom
+      this.constrainCamera()
+    }
+  }
+
+  private handleWheel(pointer: Phaser.Input.Pointer, _gameObjects: Phaser.GameObjects.GameObject[], _deltaX: number, deltaY: number, _deltaZ: number) {
+    const evt = pointer.event as { preventDefault?: () => void } | undefined
+    evt?.preventDefault?.()
+
+    const cam = this.cameras.main
+    const zoomFactor = deltaY > 0 ? 0.9 : 1.1
+    this.applyZoom(cam.zoom * zoomFactor, pointer)
+  }
+
+  private beginPan(pointer: Phaser.Input.Pointer) {
+    const cam = this.cameras.main
+    this.isPanning = true
+    this.panPointerId = pointer.id
+    this.panStart.set(pointer.x, pointer.y)
+    this.panScrollStart.set(cam.scrollX, cam.scrollY)
+    this.pinchStartDistance = null
+    this.setDraggingCursor(true)
+  }
+
+  private beginPinch() {
+    const points = Array.from(this.activePointers.values())
+    if (points.length < 2) return
+
+    this.isPanning = false
+    this.panPointerId = null
+    this.setDraggingCursor(false)
+    this.pinchStartDistance = Phaser.Math.Distance.Between(points[0].x, points[0].y, points[1].x, points[1].y)
+    this.pinchStartZoom = this.cameras.main.zoom
+  }
+
+  private applyZoom(targetZoom: number, focus?: { x: number; y: number }) {
+    const cam = this.cameras.main
+    const newZoom = Phaser.Math.Clamp(targetZoom, this.minZoom, this.maxZoom)
+    const focusPoint = focus ?? { x: this.scale.width / 2, y: this.scale.height / 2 }
+    const before = cam.getWorldPoint(focusPoint.x, focusPoint.y, new Phaser.Math.Vector2())
+    cam.setZoom(newZoom)
+    const after = cam.getWorldPoint(focusPoint.x, focusPoint.y, new Phaser.Math.Vector2())
+    cam.scrollX += before.x - after.x
+    cam.scrollY += before.y - after.y
+    this.constrainCamera()
+  }
+
+  private constrainCamera() {
+    const cam = this.cameras.main
+    const bounds = cam.getBounds(new Phaser.Geom.Rectangle())
+    if (bounds.width === 0 && bounds.height === 0) {
+      return
+    }
+
+    const viewWidth = cam.width / cam.zoom
+    const viewHeight = cam.height / cam.zoom
+
+    if (bounds.width <= viewWidth) {
+      cam.scrollX = bounds.centerX - viewWidth / 2
+    } else {
+      const maxX = bounds.right - viewWidth
+      cam.scrollX = Phaser.Math.Clamp(cam.scrollX, bounds.x, maxX)
+    }
+
+    if (bounds.height <= viewHeight) {
+      cam.scrollY = bounds.centerY - viewHeight / 2
+    } else {
+      const maxY = bounds.bottom - viewHeight
+      cam.scrollY = Phaser.Math.Clamp(cam.scrollY, bounds.y, maxY)
+    }
+  }
+
+  private refreshCameraBounds(fitCamera: boolean) {
+    if (!this.sim) return
+
+    const width = this.scale.width
+    const height = Math.max(this.scale.height, this.topMargin + (this.sim.floors - 1) * this.floorHeight + this.topMargin)
+    const cam = this.cameras.main
+    cam.setBounds(-this.boundsPadding.x, -this.boundsPadding.y, width + this.boundsPadding.x * 2, height + this.boundsPadding.y * 2)
+    if (fitCamera) {
+      const fitZoom = Phaser.Math.Clamp(Math.min(1, this.scale.height / height), this.minZoom, this.maxZoom)
+      cam.setZoom(fitZoom)
+      cam.centerOn(width / 2, this.scale.height / 2)
+    }
+    this.constrainCamera()
+  }
+
+  private cancelGestures() {
+    this.isPanning = false
+    this.panPointerId = null
+    this.pinchStartDistance = null
+    this.activePointers.clear()
+    this.setDraggingCursor(false)
+  }
+
+  private findPointerById(id: number) {
+    return this.input.manager.pointers.find(p => p && p.id === id)
+  }
+
+  private setDraggingCursor(active: boolean) {
+    const canvas = this.game.canvas as HTMLCanvasElement | undefined
+    if (!canvas) return
+    if (active) canvas.classList.add('grabbing')
+    else canvas.classList.remove('grabbing')
   }
 
   private draw() {
