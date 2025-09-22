@@ -284,15 +284,31 @@ export class GameScene extends Phaser.Scene {
     if (!this.sim) return
 
     const width = this.scale.width
-    const height = Math.max(this.scale.height, this.topMargin + (this.sim.floors - 1) * this.floorHeight + this.topMargin)
+    const { top: buildingTop, bottom: buildingBottom, totalHeight } = this.getBuildingBounds()
     const cam = this.cameras.main
-    cam.setBounds(-this.boundsPadding.x, -this.boundsPadding.y, width + this.boundsPadding.x * 2, height + this.boundsPadding.y * 2)
+
+    const left = -this.boundsPadding.x
+    const right = width + this.boundsPadding.x
+    const top = Math.min(-this.boundsPadding.y, buildingTop - this.boundsPadding.y)
+    const bottom = Math.max(this.scale.height + this.boundsPadding.y, buildingBottom + this.boundsPadding.y)
+    cam.setBounds(left, top, right - left, bottom - top)
+
     if (fitCamera) {
-      const fitZoom = Phaser.Math.Clamp(Math.min(1, this.scale.height / height), this.minZoom, this.maxZoom)
+      const contentHeight = Math.max(this.scale.height, this.topMargin * 2 + totalHeight)
+      const fitZoom = Phaser.Math.Clamp(Math.min(1, this.scale.height / contentHeight), this.minZoom, this.maxZoom)
       cam.setZoom(fitZoom)
       cam.centerOn(width / 2, this.scale.height / 2)
     }
+
     this.constrainCamera()
+  }
+
+  private getBuildingBounds() {
+    const buildingBottom = this.scale.height - this.topMargin
+    const totalHeight = Math.max(0, (this.sim.floors - 1) * this.floorHeight)
+    const usableHeight = this.scale.height - this.topMargin * 2
+    const buildingTop = totalHeight > usableHeight ? buildingBottom - totalHeight : this.topMargin
+    return { top: buildingTop, bottom: buildingBottom, height: buildingBottom - buildingTop, totalHeight }
   }
 
   private cancelGestures() {
@@ -316,14 +332,12 @@ export class GameScene extends Phaser.Scene {
 
   private draw() {
     const width = this.scale.width
-    const height = this.scale.height
     this.gfx.clear()
 
     // Building bounds
     const buildingLeft = this.leftMargin
     const buildingRight = width - 40
-    const buildingTop = this.topMargin
-    const buildingBottom = height - this.topMargin
+    const { top: buildingTop, bottom: buildingBottom } = this.getBuildingBounds()
 
     // Draw floors
     this.gfx.lineStyle(1, 0x384253, 1)
