@@ -21,6 +21,24 @@ export class GameScene extends Phaser.Scene {
   private topMargin = 40
   private shaftGap = 20
   private elevatorWidth = 40
+  private worldWidth = 800
+  private worldHeight = 600
+  private minZoom = 0.6
+  private maxZoom = 2.5
+  private dragState: { active: boolean; pointerId: number; lastX: number; lastY: number } = {
+    active: false,
+    pointerId: -1,
+    lastX: 0,
+    lastY: 0,
+  }
+  private pinchState: {
+    pointer1Id: number
+    pointer2Id: number
+    startDistance: number
+    startZoom: number
+    lastCenterX: number
+    lastCenterY: number
+  } | null = null
 
   constructor() {
     super(GameScene.KEY)
@@ -28,6 +46,7 @@ export class GameScene extends Phaser.Scene {
 
   create() {
     this.gfx = this.add.graphics()
+    this.setupCamera()
     this.resetSim()
 
     // Listen for UI events via game registry
@@ -51,6 +70,175 @@ export class GameScene extends Phaser.Scene {
       if (!this.sim) return
       this.sim.spawnDirected(floor, dir)
     })
+  }
+
+  private setupCamera() {
+    const camera = this.cameras.main
+    camera.setZoom(1)
+    camera.setBounds(0, 0, this.worldWidth, this.worldHeight)
+    this.input.addPointer(2)
+    this.input.mouse?.disableContextMenu()
+
+    this.input.on('pointerdown', this.handlePointerDown, this)
+    this.input.on('pointerup', this.handlePointerUp, this)
+    this.input.on('pointerupoutside', this.handlePointerUp, this)
+    this.input.on('pointermove', this.handlePointerMove, this)
+    this.input.on('wheel', this.handleWheel, this)
+  }
+
+  private handlePointerDown(pointer: Phaser.Input.Pointer) {
+    const pointerType = this.getPointerType(pointer)
+    if (pointerType === 'mouse') {
+      if (pointer.leftButtonDown()) this.beginDrag(pointer)
+      return
+    }
+
+    if (pointerType === 'touch') {
+      const touches = this.getTouchPointers()
+      if (touches.length === 2) {
+        this.beginPinch(touches[0], touches[1])
+      } else if (touches.length === 1) {
+        this.beginDrag(pointer)
+      }
+    }
+  }
+
+  private handlePointerMove(pointer: Phaser.Input.Pointer) {
+    if (this.pinchState) {
+      this.updatePinch()
+      return
+    }
+
+    if (this.dragState.active && pointer.id === this.dragState.pointerId) {
+      this.updateDrag(pointer)
+    }
+  }
+
+  private handlePointerUp(pointer: Phaser.Input.Pointer) {
+    if (this.dragState.active && this.dragState.pointerId === pointer.id) {
+      this.dragState.active = false
+    }
+
+    if (this.pinchState && (pointer.id === this.pinchState.pointer1Id || pointer.id === this.pinchState.pointer2Id)) {
+      this.pinchState = null
+      const touches = this.getTouchPointers()
+      if (touches.length === 1) this.beginDrag(touches[0])
+    }
+  }
+
+  private handleWheel(
+    pointer: Phaser.Input.Pointer,
+    _gameObjects: unknown[],
+    _deltaX: number,
+    deltaY: number,
+    _deltaZ: number,
+    event: WheelEvent,
+  ) {
+    event?.preventDefault()
+    const camera = this.cameras.main
+    const zoomFactor = Phaser.Math.Clamp(1 - deltaY * 0.001, 0.5, 1.5)
+    const newZoom = camera.zoom * zoomFactor
+    this.setCameraZoom(newZoom, pointer.worldX, pointer.worldY)
+  }
+
+  private beginDrag(pointer: Phaser.Input.Pointer) {
+    if (this.pinchState) return
+    this.dragState = { active: true, pointerId: pointer.id, lastX: pointer.x, lastY: pointer.y }
+  }
+
+  private updateDrag(pointer: Phaser.Input.Pointer) {
+    const camera = this.cameras.main
+    const dx = pointer.x - this.dragState.lastX
+    const dy = pointer.y - this.dragState.lastY
+    camera.scrollX -= dx / camera.zoom
+    camera.scrollY -= dy / camera.zoom
+    this.dragState.lastX = pointer.x
+    this.dragState.lastY = pointer.y
+    this.clampCamera()
+  }
+
+  private beginPinch(p1: Phaser.Input.Pointer, p2: Phaser.Input.Pointer) {
+    this.dragState.active = false
+    const distance = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y)
+    const centerX = (p1.x + p2.x) / 2
+    const centerY = (p1.y + p2.y) / 2
+    this.pinchState = {
+      pointer1Id: p1.id,
+      pointer2Id: p2.id,
+      startDistance: distance || 1,
+      startZoom: this.cameras.main.zoom,
+      lastCenterX: centerX,
+      lastCenterY: centerY,
+    }
+  }
+
+  private updatePinch() {
+    if (!this.pinchState) return
+    const p1 = this.getPointerById(this.pinchState.pointer1Id)
+    const p2 = this.getPointerById(this.pinchState.pointer2Id)
+    if (!p1 || !p2 || !p1.isDown || !p2.isDown) {
+      this.pinchState = null
+      return
+    }
+
+    const camera = this.cameras.main
+    const centerX = (p1.x + p2.x) / 2
+    const centerY = (p1.y + p2.y) / 2
+    const dx = centerX - this.pinchState.lastCenterX
+    const dy = centerY - this.pinchState.lastCenterY
+    camera.scrollX -= dx / camera.zoom
+    camera.scrollY -= dy / camera.zoom
+    this.pinchState.lastCenterX = centerX
+    this.pinchState.lastCenterY = centerY
+
+    const distance = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y)
+    const ratio = distance / Math.max(0.0001, this.pinchState.startDistance)
+    const zoomTarget = this.pinchState.startZoom * ratio
+    const centerWorldX = (p1.worldX + p2.worldX) / 2
+    const centerWorldY = (p1.worldY + p2.worldY) / 2
+    this.setCameraZoom(zoomTarget, centerWorldX, centerWorldY)
+    this.pinchState.startZoom = this.cameras.main.zoom
+    this.pinchState.startDistance = distance
+    this.clampCamera()
+  }
+
+  private getTouchPointers() {
+    return this.getPointerList().filter(p => p.isDown && this.getPointerType(p) === 'touch')
+  }
+
+  private getPointerById(id: number) {
+    return this.getPointerList().find(p => p.id === id) ?? null
+  }
+
+  private getPointerList() {
+    const input = this.input
+    const pointers = [
+      input.pointer1,
+      input.pointer2,
+      input.pointer3,
+      input.pointer4,
+      input.pointer5,
+      input.pointer6,
+      input.pointer7,
+      input.pointer8,
+      input.pointer9,
+      input.pointer10,
+    ]
+    const seen = new Set<number>()
+    const out: Phaser.Input.Pointer[] = []
+    for (const pointer of pointers) {
+      if (!seen.has(pointer.id)) {
+        seen.add(pointer.id)
+        out.push(pointer)
+      }
+    }
+    return out
+  }
+
+  private getPointerType(pointer: Phaser.Input.Pointer) {
+    const raw = (pointer as any).pointerType ?? (pointer as any).event?.pointerType
+    if (typeof raw === 'string') return raw
+    return (pointer as any).wasTouch ? 'touch' : 'mouse'
   }
 
   private resetSim() {
@@ -100,17 +288,30 @@ export class GameScene extends Phaser.Scene {
   }
 
   private draw() {
-    const width = this.scale.width
-    const height = this.scale.height
-    this.gfx.clear()
-
-    // Building bounds
+    const viewportWidth = this.scale.width
+    const viewportHeight = this.scale.height
+    const shafts = this.sim.elevators.length
+    const shaftCount = Math.max(1, shafts)
+    const floorsHeight = this.floorHeight * (this.sim.floors - 1)
     const buildingLeft = this.leftMargin
-    const buildingRight = width - 40
     const buildingTop = this.topMargin
-    const buildingBottom = height - this.topMargin
 
-    // Draw floors
+    const baseShaftSpan = shaftCount * (this.elevatorWidth + this.shaftGap) + this.shaftGap
+    const targetUsableWidth = Math.max(viewportWidth - (buildingLeft + 160), baseShaftSpan)
+    let shaftWidth = Math.floor((targetUsableWidth - (shaftCount + 1) * this.shaftGap) / shaftCount)
+    shaftWidth = Math.min(this.elevatorWidth, Math.max(24, shaftWidth))
+    const buildingWidth = this.shaftGap + shaftCount * (shaftWidth + this.shaftGap)
+    const buildingRight = buildingLeft + buildingWidth
+    const buildingBottom = buildingTop + floorsHeight
+    const worldWidth = Math.max(viewportWidth, buildingRight + this.leftMargin + 160)
+    const worldHeight = Math.max(viewportHeight, buildingBottom + this.topMargin + 160)
+
+    this.updateWorldBounds(worldWidth, worldHeight)
+
+    this.gfx.clear()
+    this.gfx.fillStyle(0x0f1216, 1)
+    this.gfx.fillRect(0, 0, worldWidth, worldHeight)
+
     this.gfx.lineStyle(1, 0x384253, 1)
     for (let f = 0; f < this.sim.floors; f++) {
       const y = buildingBottom - f * this.floorHeight
@@ -120,39 +321,30 @@ export class GameScene extends Phaser.Scene {
       this.gfx.closePath()
       this.gfx.strokePath()
 
-      // labels
       this.gfx.fillStyle(0xa5b0bf, 1)
       this.gfx.fillRect(buildingLeft - 60, y - 10, 52, 20)
       this.addText(`${f}`, buildingLeft - 54, y - 8, 0x0f1216)
     }
 
-    // Draw shafts and elevators
-    const shafts = this.sim.elevators.length
-    const usableWidth = buildingRight - buildingLeft
-    const shaftWidth = Math.min(this.elevatorWidth, Math.floor((usableWidth - (shafts + 1) * this.shaftGap) / shafts))
-
     for (let i = 0; i < shafts; i++) {
       const x = buildingLeft + this.shaftGap + i * (shaftWidth + this.shaftGap)
-      // shaft
+      const shaftHeight = Math.max(0, buildingBottom - buildingTop)
       this.gfx.fillStyle(0x11151b, 1)
-      this.gfx.fillRect(x, buildingTop, shaftWidth, buildingBottom - buildingTop)
+      this.gfx.fillRect(x, buildingTop, shaftWidth, shaftHeight)
       this.gfx.lineStyle(1, 0x2a2f3a, 1)
-      this.gfx.strokeRect(x, buildingTop, shaftWidth, buildingBottom - buildingTop)
+      this.gfx.strokeRect(x, buildingTop, shaftWidth, shaftHeight)
 
-      // elevator id label
       this.addText(`#${i}`, x + 6, buildingTop - 18, 0xa5b0bf)
 
       const elev = this.sim.elevators[i]
-      const elevY = buildingBottom - elev.position * this.floorHeight - shaftWidth // square cab
+      const elevY = buildingBottom - elev.position * this.floorHeight - shaftWidth
       const doorColor = elev.doorsOpen ? 0x58d68d : 0x59c1ff
 
-      // cab
       this.gfx.fillStyle(0x223040, 1)
       this.gfx.fillRect(x + 2, elevY, shaftWidth - 4, shaftWidth - 4)
       this.gfx.lineStyle(2, doorColor, 1)
       this.gfx.strokeRect(x + 2, elevY, shaftWidth - 4, shaftWidth - 4)
 
-      // direction indicator
       if (elev.direction !== 0) {
         const triY = elevY + 6
         const midX = x + shaftWidth / 2
@@ -162,10 +354,8 @@ export class GameScene extends Phaser.Scene {
         else this.gfx.fillTriangle(midX, triY + 10, midX - 6, triY, midX + 6, triY)
       }
 
-      // occupancy text
       this.addText(`${elev.passengers.length}/${elev.capacity}`, x + 6, elevY + 4, 0xffffff)
 
-      // passenger count bar
       const capPct = elev.passengers.length / elev.capacity
       const barH = 4
       const barY = elevY + shaftWidth - 6
@@ -174,17 +364,18 @@ export class GameScene extends Phaser.Scene {
       this.gfx.fillStyle(0xffd166, 1)
       this.gfx.fillRect(x + 2, barY, Math.max(0, (shaftWidth - 4) * capPct), barH)
 
-      // targets markers
       const destFloor = this.getNextDestination(elev)
       for (const t of elev.targets) {
         const ty = buildingBottom - t * this.floorHeight - 2
         const color = destFloor !== null && t === destFloor ? 0x58d68d : 0xff6b6b
         this.gfx.lineStyle(1, color, 1)
-        this.gfx.beginPath(); this.gfx.moveTo(x + 2, ty); this.gfx.lineTo(x + shaftWidth - 2, ty); this.gfx.strokePath()
+        this.gfx.beginPath()
+        this.gfx.moveTo(x + 2, ty)
+        this.gfx.lineTo(x + shaftWidth - 2, ty)
+        this.gfx.strokePath()
       }
     }
 
-    // Draw waiting passengers dots
     for (let f = 0; f < this.sim.floors; f++) {
       const y = buildingBottom - f * this.floorHeight
       const upQ = this.sim.floorsState[f].upQueue.length
@@ -201,10 +392,46 @@ export class GameScene extends Phaser.Scene {
         this.gfx.fillCircle(buildingLeft - 20 - i * (dotSize + 2), y + 12, dotSize)
       }
 
-      // counts and arrows for clarity
       this.addText(`↑${upQ}`, buildingLeft - 100, y - 16, 0x58d68d)
       this.addText(`↓${dnQ}`, buildingLeft - 100, y + 4, 0xff6b6b)
     }
+  }
+
+  private setCameraZoom(zoom: number, centerX: number, centerY: number) {
+    const camera = this.cameras.main
+    const clamped = Phaser.Math.Clamp(zoom, this.minZoom, this.maxZoom)
+    const prevZoom = camera.zoom
+    if (Math.abs(clamped - prevZoom) < 1e-6) {
+      camera.setZoom(clamped)
+      this.clampCamera()
+      return
+    }
+
+    const offsetX = centerX - camera.scrollX
+    const offsetY = centerY - camera.scrollY
+    camera.setZoom(clamped)
+    camera.scrollX = centerX - offsetX * (prevZoom / clamped)
+    camera.scrollY = centerY - offsetY * (prevZoom / clamped)
+    this.clampCamera()
+  }
+
+  private clampCamera() {
+    const camera = this.cameras.main
+    const viewWidth = camera.width / camera.zoom
+    const viewHeight = camera.height / camera.zoom
+    const maxScrollX = Math.max(0, this.worldWidth - viewWidth)
+    const maxScrollY = Math.max(0, this.worldHeight - viewHeight)
+    camera.scrollX = Phaser.Math.Clamp(camera.scrollX, 0, maxScrollX)
+    camera.scrollY = Phaser.Math.Clamp(camera.scrollY, 0, maxScrollY)
+  }
+
+  private updateWorldBounds(width: number, height: number) {
+    if (width !== this.worldWidth || height !== this.worldHeight) {
+      this.worldWidth = width
+      this.worldHeight = height
+      this.cameras.main.setBounds(0, 0, width, height)
+    }
+    this.clampCamera()
   }
 
   private addText(text: string, x: number, y: number, color: number) {

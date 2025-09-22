@@ -25,54 +25,48 @@ export function setupUI(game: Phaser.Game) {
   const manualDir = getEl<HTMLSelectElement>('manualDir')
   const manualCall = getEl<HTMLButtonElement>('manualCall')
 
-  const tabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.tab-button'))
-  const screens = Array.from(document.querySelectorAll<HTMLDivElement>('.screen'))
-  if (tabButtons.length && screens.length) {
-    let activeScreen = tabButtons.find(btn => btn.classList.contains('active'))?.dataset.screen ?? tabButtons[0]?.dataset.screen ?? ''
-    const tabMedia = window.matchMedia('(max-width: 900px)')
+  const navButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.nav-button'))
+  const views = Array.from(document.querySelectorAll<HTMLElement>('.view'))
+  if (navButtons.length && views.length) {
+    let activeView = navButtons.find(btn => btn.classList.contains('active'))?.dataset.view ?? navButtons[0]?.dataset.view ?? ''
 
-    const applyTabState = () => {
-      if (!activeScreen) return
-      screens.forEach(screen => {
-        const isActive = screen.dataset.screen === activeScreen
-        screen.classList.toggle('active', isActive)
-        if (tabMedia.matches) {
-          screen.setAttribute('aria-hidden', isActive ? 'false' : 'true')
-        } else {
-          screen.setAttribute('aria-hidden', 'false')
-        }
+    const applyViewState = () => {
+      if (!activeView) return
+      views.forEach(view => {
+        const isActive = view.dataset.view === activeView
+        view.classList.toggle('active', isActive)
+        view.setAttribute('aria-hidden', isActive ? 'false' : 'true')
       })
 
-      tabButtons.forEach(btn => {
-        const isActive = btn.dataset.screen === activeScreen
+      navButtons.forEach(btn => {
+        const isActive = btn.dataset.view === activeView
         btn.classList.toggle('active', isActive)
         btn.setAttribute('aria-selected', isActive ? 'true' : 'false')
-        if (tabMedia.matches) {
-          btn.setAttribute('tabindex', isActive ? '0' : '-1')
-        } else {
-          btn.setAttribute('tabindex', '0')
-        }
+        btn.tabIndex = isActive ? 0 : -1
       })
     }
 
-    const setActiveScreen = (target: string) => {
-      if (!target || target === activeScreen) return
-      activeScreen = target
-      applyTabState()
+    const setActiveView = (target: string) => {
+      if (!target || target === activeView) return
+      activeView = target
+      applyViewState()
     }
 
-    tabButtons.forEach(btn => {
-      btn.addEventListener('click', () => setActiveScreen(btn.dataset.screen ?? ''))
+    navButtons.forEach(btn => {
+      btn.addEventListener('click', () => setActiveView(btn.dataset.view ?? ''))
+      btn.addEventListener('keydown', event => {
+        if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return
+        event.preventDefault()
+        const currentIndex = navButtons.indexOf(btn)
+        const delta = event.key === 'ArrowRight' ? 1 : -1
+        const nextIndex = (currentIndex + delta + navButtons.length) % navButtons.length
+        const nextBtn = navButtons[nextIndex]
+        setActiveView(nextBtn.dataset.view ?? '')
+        nextBtn.focus()
+      })
     })
 
-    const handleTabMediaChange = () => applyTabState()
-    if (typeof tabMedia.addEventListener === 'function') {
-      tabMedia.addEventListener('change', handleTabMediaChange)
-    } else {
-      tabMedia.addListener(handleTabMediaChange)
-    }
-
-    applyTabState()
+    applyViewState()
   }
 
   const defaultCustom = `// Example custom algorithm
