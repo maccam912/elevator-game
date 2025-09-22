@@ -21,6 +21,15 @@ export class GameScene extends Phaser.Scene {
   private topMargin = 40
   private shaftGap = 20
   private elevatorWidth = 40
+  private dragPointerId: number | null = null
+  private dragStart = new Phaser.Math.Vector2()
+  private cameraStart = new Phaser.Math.Vector2()
+  private pinchZooming = false
+  private pinchStartDist = 0
+  private pinchStartZoom = 1
+  private cameraBounds = new Phaser.Geom.Rectangle(0, 0, 0, 0)
+  private readonly minZoom = 0.45
+  private readonly maxZoom = 3
 
   constructor() {
     super(GameScene.KEY)
@@ -29,6 +38,10 @@ export class GameScene extends Phaser.Scene {
   create() {
     this.gfx = this.add.graphics()
     this.resetSim()
+    this.input.addPointer(2)
+    this.setupCameraControls()
+    this.cameras.main.setZoom(1)
+    this.cameras.main.setScroll(0, 0)
 
     // Listen for UI events via game registry
     this.game.events.on('sim:apply', (cfg: Partial<SimConfig> & { algorithm: AlgorithmKind }) => {
@@ -51,6 +64,136 @@ export class GameScene extends Phaser.Scene {
       if (!this.sim) return
       this.sim.spawnDirected(floor, dir)
     })
+  }
+
+  private setupCameraControls() {
+    const mouse = this.input.mouse
+    if (mouse) {
+      mouse.preventDefaultWheel = true
+    }
+
+    this.input.on('pointerdown', this.handlePointerDown, this)
+    this.input.on('pointerup', this.handlePointerUp, this)
+    this.input.on('pointerupoutside', this.handlePointerUp, this)
+    this.input.on('pointermove', this.handlePointerMove, this)
+    this.input.on('wheel', this.handleWheel, this)
+  }
+
+  private handlePointerDown(pointer: Phaser.Input.Pointer) {
+    if (pointer.button !== 0) return
+
+    const pointer1 = this.input.pointer1
+    const pointer2 = this.input.pointer2
+
+    if (pointer1.isDown && pointer2 && pointer2.isDown) {
+      this.dragPointerId = null
+      return
+    }
+
+    if (pointer1.isDown && pointer.id !== pointer1.id) {
+      this.dragPointerId = null
+      return
+    }
+
+    this.dragPointerId = pointer.id
+    this.dragStart.set(pointer.x, pointer.y)
+    this.cameraStart.set(this.cameras.main.scrollX, this.cameras.main.scrollY)
+  }
+
+  private handlePointerUp(pointer: Phaser.Input.Pointer) {
+    if (pointer.id === this.dragPointerId) {
+      this.dragPointerId = null
+    }
+
+    const pointer1 = this.input.pointer1
+    const pointer2 = this.input.pointer2
+    if (!(pointer1.isDown && pointer2 && pointer2.isDown)) {
+      this.pinchZooming = false
+    }
+  }
+
+  private handlePointerMove(pointer: Phaser.Input.Pointer) {
+    const cam = this.cameras.main
+    const pointer1 = this.input.pointer1
+    const pointer2 = this.input.pointer2
+
+    if (pointer1.isDown && pointer2 && pointer2.isDown) {
+      const dist = Phaser.Math.Distance.Between(pointer1.x, pointer1.y, pointer2.x, pointer2.y)
+      const centerX = (pointer1.x + pointer2.x) / 2
+      const centerY = (pointer1.y + pointer2.y) / 2
+      if (!this.pinchZooming) {
+        this.pinchZooming = true
+        this.pinchStartDist = dist
+        this.pinchStartZoom = cam.zoom
+        this.dragPointerId = null
+      } else if (this.pinchStartDist > 0) {
+        const newZoom = this.pinchStartZoom * (dist / this.pinchStartDist)
+        this.applyZoom(newZoom, centerX, centerY)
+      }
+      return
+    }
+
+    this.pinchZooming = false
+
+    if (this.dragPointerId === pointer.id && pointer.isDown) {
+      const dx = (pointer.x - this.dragStart.x) / cam.zoom
+      const dy = (pointer.y - this.dragStart.y) / cam.zoom
+      cam.scrollX = this.cameraStart.x - dx
+      cam.scrollY = this.cameraStart.y - dy
+      this.clampCamera()
+    }
+  }
+
+  private handleWheel(
+    _pointer: Phaser.Input.Pointer,
+    _gameObjects: Phaser.GameObjects.GameObject[],
+    deltaX: number,
+    deltaY: number,
+  ) {
+    const pointer = this.input.activePointer
+    const nativeEvent = pointer.event as WheelEvent | undefined
+    nativeEvent?.preventDefault()
+    const primaryDelta = Math.abs(deltaY) > Math.abs(deltaX) ? deltaY : deltaX
+    if (primaryDelta === 0) return
+    const factor = primaryDelta > 0 ? 0.9 : 1.1
+    const newZoom = this.cameras.main.zoom * factor
+    this.applyZoom(newZoom, pointer.x, pointer.y)
+  }
+
+  private applyZoom(zoom: number, focusX?: number, focusY?: number) {
+    const cam = this.cameras.main
+    const clamped = Phaser.Math.Clamp(zoom, this.minZoom, this.maxZoom)
+    if (focusX === undefined || focusY === undefined) {
+      cam.setZoom(clamped)
+    } else {
+      const worldPoint = cam.getWorldPoint(focusX, focusY)
+      cam.setZoom(clamped)
+      const newWorldPoint = cam.getWorldPoint(focusX, focusY)
+      cam.scrollX += worldPoint.x - newWorldPoint.x
+      cam.scrollY += worldPoint.y - newWorldPoint.y
+    }
+    this.clampCamera()
+  }
+
+  private clampCamera() {
+    const cam = this.cameras.main
+    const bounds = this.cameraBounds
+    if (bounds.width === 0 || bounds.height === 0) return
+
+    const viewWidth = cam.width / cam.zoom
+    const viewHeight = cam.height / cam.zoom
+
+    if (bounds.width <= viewWidth) {
+      cam.scrollX = bounds.x + (bounds.width - viewWidth) / 2
+    } else {
+      cam.scrollX = Phaser.Math.Clamp(cam.scrollX, bounds.left, bounds.right - viewWidth)
+    }
+
+    if (bounds.height <= viewHeight) {
+      cam.scrollY = bounds.y + (bounds.height - viewHeight) / 2
+    } else {
+      cam.scrollY = Phaser.Math.Clamp(cam.scrollY, bounds.top, bounds.bottom - viewHeight)
+    }
   }
 
   private resetSim() {
@@ -205,6 +348,17 @@ export class GameScene extends Phaser.Scene {
       this.addText(`↑${upQ}`, buildingLeft - 100, y - 16, 0x58d68d)
       this.addText(`↓${dnQ}`, buildingLeft - 100, y + 4, 0xff6b6b)
     }
+
+    const lastShaftX = shafts > 0 ? buildingLeft + this.shaftGap + (shafts - 1) * (shaftWidth + this.shaftGap) : buildingLeft
+    const contentRight = shafts > 0 ? lastShaftX + shaftWidth + this.shaftGap : buildingRight
+    const leftExtent = Math.min(buildingLeft - 160, -120)
+    const rightExtent = Math.max(contentRight + 160, width + 160)
+    const topExtent = Math.min(buildingTop - 220, -160)
+    const bottomExtent = Math.max(buildingBottom + 220, height + 220)
+
+    this.cameraBounds.setTo(leftExtent, topExtent, rightExtent - leftExtent, bottomExtent - topExtent)
+    this.cameras.main.setBounds(this.cameraBounds.x, this.cameraBounds.y, this.cameraBounds.width, this.cameraBounds.height)
+    this.clampCamera()
   }
 
   private addText(text: string, x: number, y: number, color: number) {

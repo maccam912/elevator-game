@@ -25,54 +25,63 @@ export function setupUI(game: Phaser.Game) {
   const manualDir = getEl<HTMLSelectElement>('manualDir')
   const manualCall = getEl<HTMLButtonElement>('manualCall')
 
-  const tabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.tab-button'))
-  const screens = Array.from(document.querySelectorAll<HTMLDivElement>('.screen'))
-  if (tabButtons.length && screens.length) {
-    let activeScreen = tabButtons.find(btn => btn.classList.contains('active'))?.dataset.screen ?? tabButtons[0]?.dataset.screen ?? ''
-    const tabMedia = window.matchMedia('(max-width: 900px)')
+  const shell = document.querySelector<HTMLElement>('.app-shell')
+  const navButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.nav-link'))
+  const viewPanels = Array.from(document.querySelectorAll<HTMLElement>('.view-panel'))
+  const simulationPanel = document.getElementById('view-simulation')
 
-    const applyTabState = () => {
-      if (!activeScreen) return
-      screens.forEach(screen => {
-        const isActive = screen.dataset.screen === activeScreen
-        screen.classList.toggle('active', isActive)
-        if (tabMedia.matches) {
-          screen.setAttribute('aria-hidden', isActive ? 'false' : 'true')
-        } else {
-          screen.setAttribute('aria-hidden', 'false')
-        }
-      })
-
-      tabButtons.forEach(btn => {
-        const isActive = btn.dataset.screen === activeScreen
-        btn.classList.toggle('active', isActive)
-        btn.setAttribute('aria-selected', isActive ? 'true' : 'false')
-        if (tabMedia.matches) {
-          btn.setAttribute('tabindex', isActive ? '0' : '-1')
-        } else {
-          btn.setAttribute('tabindex', '0')
-        }
-      })
+  const setActiveView = (target: string, updateHash = true) => {
+    if (!shell) return
+    const available = navButtons.map(btn => btn.dataset.view ?? '')
+    const desired = available.includes(target) ? target : 'simulation'
+    if (shell.dataset.activeView === desired) {
+      if (updateHash && window.location.hash !== `#${desired}`) {
+        window.location.hash = desired
+      }
+      return
     }
 
-    const setActiveScreen = (target: string) => {
-      if (!target || target === activeScreen) return
-      activeScreen = target
-      applyTabState()
-    }
+    shell.dataset.activeView = desired
 
-    tabButtons.forEach(btn => {
-      btn.addEventListener('click', () => setActiveScreen(btn.dataset.screen ?? ''))
+    navButtons.forEach(btn => {
+      const isActive = btn.dataset.view === desired
+      btn.classList.toggle('active', isActive)
+      btn.setAttribute('aria-selected', isActive ? 'true' : 'false')
+      btn.setAttribute('tabindex', isActive ? '0' : '-1')
     })
 
-    const handleTabMediaChange = () => applyTabState()
-    if (typeof tabMedia.addEventListener === 'function') {
-      tabMedia.addEventListener('change', handleTabMediaChange)
-    } else {
-      tabMedia.addListener(handleTabMediaChange)
+    if (simulationPanel) {
+      simulationPanel.setAttribute('aria-hidden', desired === 'simulation' ? 'false' : 'true')
     }
 
-    applyTabState()
+    viewPanels.forEach(panel => {
+      const isActive = panel.dataset.view === desired
+      panel.classList.toggle('active', isActive)
+      panel.setAttribute('aria-hidden', isActive ? 'false' : 'true')
+      panel.setAttribute('tabindex', isActive ? '0' : '-1')
+      if (isActive) panel.scrollTop = 0
+    })
+
+    if (updateHash && window.location.hash !== `#${desired}`) {
+      window.location.hash = desired
+    }
+  }
+
+  if (navButtons.length) {
+    navButtons.forEach(btn => {
+      btn.addEventListener('click', evt => {
+        evt.preventDefault()
+        setActiveView(btn.dataset.view ?? 'simulation')
+      })
+    })
+
+    window.addEventListener('hashchange', () => {
+      const hash = window.location.hash.replace(/^#/, '')
+      setActiveView(hash || 'simulation', false)
+    })
+
+    const initial = window.location.hash.replace(/^#/, '')
+    setActiveView(initial || shell?.dataset.activeView || 'simulation', false)
   }
 
   const defaultCustom = `// Example custom algorithm
@@ -110,7 +119,7 @@ function decide(state){
   updateLobbyLabel()
 
   algorithmSelect.addEventListener('change', () => {
-    customSection.style.display = algorithmSelect.value === 'custom' ? 'block' : 'none'
+    customSection.style.display = algorithmSelect.value === 'custom' ? 'flex' : 'none'
   })
 
   applyBtn.addEventListener('click', () => {
